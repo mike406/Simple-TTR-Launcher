@@ -2,6 +2,7 @@
 ### Custom launcher for Toontown Rewritten
 
 No GUI, no fuss, and with credential storage for automated logins
+
 Currently only supported on Windows - Executable download on Releases page
 
 How to use:
