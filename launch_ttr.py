@@ -150,7 +150,11 @@ def init():
     #Check if use-stored-accounts is set
     use_stored_accounts = settings_data['launcher']['use-stored-accounts']
     if (use_stored_accounts is True):
-        num_accounts = len(settings_data['accounts']) / 2
+        length = len(settings_data['accounts'])
+        if (length & 1 == 1):
+            print('Mismatched account information\nDouble check login.json for any mistakes')
+            quit();
+        num_accounts = length / 2
         selection = 1
     
     #Begin user input
