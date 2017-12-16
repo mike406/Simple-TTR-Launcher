@@ -154,7 +154,7 @@ def init():
         selection = 1
     
     #Begin user input
-    if (use_stored_accounts is True and num_accounts >= 2):
+    if (use_stored_accounts is True and num_accounts >= 2 and len(sys.argv) != 3):
         print('Which account do you wish to log in?')
         try:
             selection = int(input('Enter corresponding number between 1 - ' + str(int(num_accounts)) + ': '))
