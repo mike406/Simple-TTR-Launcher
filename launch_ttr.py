@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright (C) 2017 Michael Luck
 # Distributed under the GNU GPL v3. For full terms see the file LICENSE.txt
 
@@ -14,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#!/usr/bin/env python3
 import os, sys, subprocess, time, json, requests, threading, getpass
 
 def do_request(url, params, headers):
