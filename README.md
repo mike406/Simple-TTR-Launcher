@@ -3,7 +3,9 @@
 
 With credential storage for automated logins
 
-Currently only supported on Windows - Executable download on Releases page
+Officially supported on Windows. Linux and Mac is untested at this time, but feel free to give it a try and let me know!
+
+Executable download on Releases page
 
 How to use:
 - First time run will generate a login.json file for you.
