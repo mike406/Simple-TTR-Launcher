@@ -80,7 +80,7 @@ def add_account(settings_data, return_menu=True):
     settings_data['accounts']['account'+str(num_accounts+1)] = {'username':u, 'password':p}
     
     # Open file and write json
-    with open('login.json', 'w') as settings_file:
+    with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
     print('\nAccount added.\n')
@@ -118,7 +118,7 @@ def change_account(settings_data):
     settings_data['accounts']['account'+str(selection)]['password'] = p
     
     # Open file and write json
-    with open('login.json', 'w') as settings_file:
+    with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
     print('\nPassword changed.\n')
@@ -157,7 +157,7 @@ def remove_account(settings_data):
         settings_data['accounts']['account'+str(x-1)] = settings_data['accounts'].pop('account'+str(x))
         
     # Open file and write json
-    with open('login.json', 'w') as settings_file:
+    with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
     print('\nAccount has been removed.\n')
@@ -169,7 +169,7 @@ def change_ttr_dir(settings_data):
     settings_data['launcher']['ttr-dir'] = ttr_dir
     
     # Open file and write json
-    with open('login.json', 'w') as settings_file:
+    with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
     print('\nSet new directory.\n')
@@ -252,8 +252,8 @@ def do_request(url, data, headers):
             resp_data = resp.json()
         else:
             resp_data = None
-    except:
-        print('Could not connect to login server. Check connection...\n')
+    except Exception as e:
+        print('Could not connect to login server. Check connection...\n' + str(e))
         quit()
         
     return (resp, resp_data)
@@ -291,7 +291,7 @@ def check_queue(resp_data, url, headers):
     print('Checking queue...')
     #Check for queueToken
     while resp_data['success'] == 'delayed':
-        print('You are queued in position ' + resp_data['position'])
+        print('You are queued in position ' + resp_data['position'] + '.')
         #Wait 3 secs to check if no longer in queue
         time.sleep(3)
         data = {'queueToken': resp_data['queueToken']}
@@ -341,7 +341,7 @@ def init():
     
     #Open settings file
     try:
-        with open('login.json', 'r') as settings_file:
+        with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'r') as settings_file:
             settings_data = json.load(settings_file)
     except FileNotFoundError:
         # Create new settings file
@@ -364,22 +364,21 @@ def init():
                     }
                     
         try:
-            with open('login.json', 'w+') as f:
+            with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w+') as f:
                 json.dump(json_data, f, indent=4)
-        except:
-            print('Failed to create login.json\n')
+        except Exception as e:
+            print('Failed to create login.json.\n' + str(e))
             quit()
             
         # File was created successfully, restart init()
         print('Created new login.json file.')
         init()
     except json.decoder.JSONDecodeError as inst:
-        print('Badly formatted login.json file')
-        print(inst)
-        print('\nIf unsure how to fix, delete the login.json file and re-run launcher\n')
+        print('Badly formatted login.json file.\n' + str(inst))
+        print('\nIf unsure how to fix, delete the login.json file and re-run launcher.')
         quit()
-    except:
-        print('File IO Error\n')
+    except Exception as e:
+        print('File IO Error.\n' + str(e))
         quit()
         
     show_menu(settings_data)
