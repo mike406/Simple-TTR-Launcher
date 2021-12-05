@@ -240,7 +240,7 @@ def login_worker(settings_data, url, headers, data):
     resp_data = check_additional_auth(resp_data, url, headers)
     
     #Wait in queue
-    resp_data = resp_data = check_queue(resp_data, url, headers)
+    resp_data = check_queue(resp_data, url, headers)
     
     #Start game
     start_game(settings_data, resp_data)
