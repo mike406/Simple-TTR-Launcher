@@ -317,7 +317,11 @@ def start_game(settings_data, resp_data):
     try:
         os.chdir(ttr_dir)
         
-        sp = subprocess.Popen(args="ttrengine")
+        if (platform.machine().endswith('64')):
+            sp = subprocess.Popen(args="ttrengine64")
+        else:
+            sp = subprocess.Popen(args="ttrengine")
+        
         sp.wait()
     except:
         print('Could not find Toontown Rewritten. Set your TTR directory at the Menu.')
