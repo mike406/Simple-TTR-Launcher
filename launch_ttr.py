@@ -83,7 +83,7 @@ def add_account(settings_data, return_menu=True):
     with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
-    print('\nAccount added.\n')
+    print('\nAccount has been added.\n')
     
     if return_menu == True:
         show_menu(settings_data)
@@ -121,7 +121,7 @@ def change_account(settings_data):
     with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
-    print('\nPassword changed.\n')
+    print('\nPassword has been changed.\n')
     show_menu(settings_data)
     
 def remove_account(settings_data):
@@ -172,7 +172,7 @@ def change_ttr_dir(settings_data):
     with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'w') as settings_file:
         json.dump(settings_data, settings_file, indent=4)
         
-    print('\nSet new directory.\n')
+    print('\nTTR location has been configured.\n')
     show_menu(settings_data)
     
 def prepare_login(settings_data):
@@ -253,7 +253,7 @@ def do_request(url, data, headers):
         else:
             resp_data = None
     except Exception as e:
-        print('Could not connect to login server. Check connection...\n' + str(e))
+        print('Could not connect to login server. Please check your internet connection.\n' + str(e))
         quit()
         
     return (resp, resp_data)
@@ -333,7 +333,7 @@ def start_game(settings_data, resp_data):
         show_menu(settings_data)
     
 def fail(resp):
-    print('Login request fail...servers might be down.\nStatus Code: ' + str(resp.status_code) + '\n')
+    print('Login request fail. The TTR servers may be down.\nStatus Code: ' + str(resp.status_code) + '\n')
     quit()
     
 def quit(ret=0):
