@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2017, 2018, 2021 Michael Luck
+# Copyright (C) 2017, 2018, 2021-2022 Michael Luck
 # Distributed under the GNU GPL v3. For full terms see the file LICENSE.txt
 
 # This program is free software: you can redistribute it and/or modify
@@ -21,9 +21,9 @@ if platform.system() == 'Windows':
     import winreg
 
 def show_menu(settings_data):
-    #Skip menu if using command line args
+    # Skip menu if using command line args
     if len(sys.argv) == 3:
-        prepare_login(settings_data)
+        quit()
         
     num_menu_items = 6
     print('### Main Menu ###')
@@ -176,16 +176,15 @@ def change_ttr_dir(settings_data):
     show_menu(settings_data)
     
 def prepare_login(settings_data):
-    #Check if use-stored-accounts is set
+    # Check if use-stored-accounts is set
     use_stored_accounts = settings_data['launcher']['use-stored-accounts']
-    if use_stored_accounts is True:
-        num_accounts = len(settings_data['accounts'])
+    num_accounts = len(settings_data['accounts'])
+    if use_stored_accounts is True and len(sys.argv) != 3:
         if num_accounts == 0:
-            #print('No accounts available. Returning to menu.\n')
             add_account(settings_data, False)
         selection = 1
         
-    #Begin user input
+    # Begin user input
     if use_stored_accounts is True and num_accounts > 1 and len(sys.argv) != 3:
         print('Which account do you wish to log in?')
         for x in range(num_accounts):
@@ -205,12 +204,12 @@ def prepare_login(settings_data):
                     show_menu(settings_data)
                 break;
                 
-    #Select correct stored account
+    # Select correct stored account
     if use_stored_accounts is True and len(sys.argv) != 3 and 'account'+str(selection) in settings_data['accounts']:
         username = settings_data['accounts']['account'+str(selection)]['username']
         password = settings_data['accounts']['account'+str(selection)]['password']
         
-    #Alternative login methods
+    # Alternative login methods
     if len(sys.argv) == 3:
         username = sys.argv[1]
         password = sys.argv[2]
@@ -218,34 +217,27 @@ def prepare_login(settings_data):
         username = input('Enter username: ')
         password = getpass.getpass('Enter password: ')
         
-    #Information for TTR's login api
+    # Information for TTR's login api
     url = 'https://www.toontownrewritten.com/api/login?format=json'
     headers = {'Content-type': 'application/x-www-form-urlencoded'}
     data = {'username': username, 'password': password}    
     
     login_worker(settings_data, url, headers, data)
     
-def login_worker(settings_data, url, headers, data):
-    #Begin login request
-    print("Requesting login...")
-    (resp, resp_data) = do_request(url, data, headers)
+def login_worker(settings_data, url, headers, data):    
+    # Check for incorrect login info
+    resp_data = check_login_info(settings_data, url, headers, data)
     
-    if resp_data is None:
-        fail(resp)
-        
-    #Check for incorrect login info
-    resp_data = check_login_info(resp_data, url, headers)
+    # Check for toonguard or 2 factor
+    resp_data = check_additional_auth(settings_data, resp_data, url, headers)
     
-    #Check for toonguard or 2 factor
-    resp_data = check_additional_auth(resp_data, url, headers)
+    # Wait in queue
+    resp_data = check_queue(settings_data, resp_data, url, headers)
     
-    #Wait in queue
-    resp_data = check_queue(resp_data, url, headers)
-    
-    #Start game
+    # Start game
     start_game(settings_data, resp_data)
     
-def do_request(url, data, headers):
+def do_request(url, headers, data):
     try:
         resp = requests.post(url=url, data=data, headers=headers)
         if resp.status_code == 200:
@@ -258,49 +250,69 @@ def do_request(url, data, headers):
         
     return (resp, resp_data)
     
-def check_login_info(resp_data, url, headers):
-    while resp_data['success'] == 'false':
-        print(resp_data['banner'])
-        username = input('Enter username: ')
-        password = getpass.getpass('Enter password: ')
-        data = {'username': username, 'password': password}
-        (resp, resp_data) = do_request(url, data, headers)
+def check_login_info(settings_data, url, headers, data):
+    # Attempt login
+    print("Requesting login...")
+    (resp, resp_data) = do_request(url, headers, data)
+    
+    if resp_data is None:
+        fail(resp)
         
-        if resp_data is None:
-            fail(resp)
-            
+    # False means incorrect password or servers are under maintenance
+    if resp_data['success'] == 'false':
+        if 'banner' in resp_data:
+            print(resp_data['banner'] + '\n')
+        else:
+            print('Username or password may be incorrect or the servers are down. Please check https://toon.town/status\n')
+        show_menu(settings_data)
+        
     return resp_data
     
-def check_additional_auth(resp_data, url, headers):
+def check_additional_auth(settings_data, resp_data, url, headers):
+    # Partial means TTR is looking for toonguard or 2factor so prompt user for it
     while resp_data['success'] == 'partial':
         print(resp_data['banner'])
-        code = input('Enter code: ')
-        data = {'appToken': code.rstrip(), 'authToken': resp_data['responseToken']}
-        (resp, resp_data) = do_request(url, data, headers)
+        token = input('Enter token: ')
+        data = {'appToken': token.rstrip(), 'authToken': resp_data['responseToken']}
+        (resp, resp_data) = do_request(url, headers, data)
         
-        if resp_data is None:
-            fail(resp)
+    if resp_data is None:
+        fail(resp)
         
-        #Too many attempts so we're gonna start over with login
-        if resp_data['success'] == 'false':
-            resp_data = check_login_info(resp_data, url, headers)
+    # Too many attempts so we should start over
+    if resp_data['success'] == 'false':
+        if 'banner' in resp_data:
+            print(resp_data['banner'] + '\n')
+        else:
+            print('Something is wrong with your token. You may be entering an invalid one too many times. Please try again later.\n')
+        show_menu(settings_data)
             
     return resp_data
     
-def check_queue(resp_data, url, headers):
-    print('Checking queue...')
-    #Check for queueToken
+def check_queue(settings_data, resp_data, url, headers):
+    # Check for queueToken
     while resp_data['success'] == 'delayed':
-        print('You are queued in position ' + resp_data['position'] + '.')
-        #Wait 3 secs to check if no longer in queue
-        time.sleep(3)
-        data = {'queueToken': resp_data['queueToken']}
-        (resp, resp_data) = do_request(url, data, headers)
+        print('You are queued in position ' + resp_data['position'] + ', ETA is ' + resp_data['eta'] + ' seconds.')
         
-        if resp_data is None:
-            fail(resp)
+        # Wait ETA seconds (1 second minimum) to check if no longer in queue
+        if int(resp_data['eta']) == 0:
+            eta = 1
+        time.sleep(eta)
+        data = {'queueToken': resp_data['queueToken']}
+        (resp, resp_data) = do_request(url, headers, data)
+        
+    if resp_data is None:
+        fail(resp)
             
-    print('Login successful...\n')
+    # Something went wrong so we should start over
+    if resp_data['success'] == 'false':
+        if 'banner' in resp_data:
+            print(resp_data['banner'] + '\n')
+        else:
+            print('Something went wrong logging into the queue. Please try again later.\n')
+        show_menu(settings_data)
+            
+    print('Login successful!\n')
     
     return resp_data
     
@@ -309,11 +321,11 @@ def start_game(settings_data, resp_data):
     ttr_gameserver = resp_data['gameserver']
     ttr_playcookie = resp_data['cookie']
     
-    #Set environment vars
+    # Set environment vars
     os.environ['TTR_GAMESERVER'] = ttr_gameserver
     os.environ['TTR_PLAYCOOKIE'] = ttr_playcookie
     
-    #Change to ttr directory and start the game
+    # Change to ttr directory and start the game
     try:
         os.chdir(ttr_dir)
         
@@ -341,9 +353,7 @@ def quit(ret=0):
     sys.exit(ret)
     
 def init():
-    print()
-    
-    #Open settings file
+    # Open settings file
     try:
         with open(os.path.dirname(os.path.realpath(__file__)) + '/login.json', 'r') as settings_file:
             settings_data = json.load(settings_file)
@@ -375,7 +385,7 @@ def init():
             quit()
             
         # File was created successfully, restart init()
-        print('Created new login.json file.')
+        print('Created new login.json file.\n')
         init()
     except json.decoder.JSONDecodeError as inst:
         print('Badly formatted login.json file.\n' + str(inst))
@@ -385,6 +395,10 @@ def init():
         print('File IO Error.\n' + str(e))
         quit()
         
-    show_menu(settings_data)
+    # Skip menu if using command line args
+    if len(sys.argv) == 3:
+        prepare_login(settings_data)
+    else:
+        show_menu(settings_data)
     
 init()
