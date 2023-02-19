@@ -67,7 +67,8 @@ def check_install_path(ttr_dir):
     """
 
     if not os.path.exists(ttr_dir):
-        print('The path "' + ttr_dir + '" does not exist. Create it?')
+        ttr_dir_abs = os.path.abspath(ttr_dir)
+        print(f'The path {ttr_dir_abs} does not exist. Create it?')
         answer = helper.confirm(
             'Enter 1 to confirm or 0 for Main Menu: ', 0, 1
         )
@@ -79,7 +80,7 @@ def check_install_path(ttr_dir):
                 print(
                     'Failed to create directory.\n'
                     'Ensure you have permission to write to the '
-                    f'path specified: {ttr_dir}\n'
+                    f'path specified: {ttr_dir_abs}\n'
                 )
 
                 return False
@@ -197,6 +198,7 @@ def check_files(ttr_dir, patch_manifest, debug=False):
             check_patch(
                 abs_file, patch_manifest, download_info
             )
+
     if debug:
         print(f'DEBUG: download_info = {download_info}\n')
 
@@ -262,6 +264,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                 print(
                     f'DEBUG: Remote hash: {patch_manifest[filename]["hash"]}'
                 )
+
             if sha1sum != patch_manifest[filename]['hash']:
                 # Hash does not match, see if match is found in patches
                 if sha1sum in patch_manifest[filename]['patches']:
@@ -286,6 +289,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                             'post_patch_hash': post_patch_hash
                         }
                     }
+
                     if debug:
                         print(f'DEBUG: Patch found for {filename}')
                 else:
@@ -298,6 +302,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                             'comp_hash': patch_manifest[filename]['compHash']
                         }
                     }
+
                     if debug:
                         print(f'DEBUG: Patch not found for {filename}\n')
             else:
@@ -384,7 +389,8 @@ def prepare_download(ttr_dir, download_info):
             for filename in tqdm(
                         download_info,
                         desc='Update Progress',
-                        bar_format=bar_format
+                        bar_format=bar_format,
+                        ascii=" █"
                     ):
                 attempt = 0
                 local_filename = download_info[filename]['local_filename']
@@ -470,7 +476,8 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
                         'write',
                         total=int(request.headers.get('Content-Length')),
                         desc=f'Downloading {local_filename}',
-                        leave=False
+                        leave=False,
+                        ascii=" █"
                     ) as fobj:
 
                 # Write to the file in chunks
@@ -498,6 +505,7 @@ def process_downloaded_file(ttr_dir, comp_file, decomp_file, file_info):
                         file.
     :param file_info: The file info dictionary.
     """
+
     dl_type = file_info['type']
     local_filename = file_info['local_filename']
     decomp_hash = file_info['hash']

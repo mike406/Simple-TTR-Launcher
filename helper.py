@@ -37,24 +37,28 @@ def load_login_json():
 
     :return: The settings from login.json using json.load().
     """
+
     try:
         login_json = os.path.join(get_launcher_path(), 'login.json')
         with open(login_json, encoding='utf-8') as settings_file:
             settings_data = json.load(settings_file)
     except FileNotFoundError:
-        # Create new settings file
-        if platform.system() == 'Windows':
-            try:
+        # Set a default TTR installation directory
+        try:
+            if platform.system() == 'Windows':
                 reg_key = (r'SOFTWARE\Microsoft\Windows\CurrentVersion'
                            r'\App Paths\Launcher.exe')
                 ttr_dir = winreg.QueryValue(winreg.HKEY_LOCAL_MACHINE, reg_key)
                 ttr_dir = ttr_dir.replace('Launcher.exe', '')
                 ttr_dir = ttr_dir.rstrip('/\\')
-            except OSError:
-                ttr_dir = 'C:/Program Files/Toontown Rewritten'
-        else:
-            ttr_dir = input('Please enter your desired installation path: ')
+            else:
+                ttr_dir = os.path.join(
+                    get_launcher_path(), 'Toontown Rewritten'
+                )
+        except OSError:
+            ttr_dir = os.path.join(get_launcher_path(), 'Toontown Rewritten')
 
+        # Set default login.json content
         json_data = {
                         "accounts": {
                         },
@@ -64,17 +68,18 @@ def load_login_json():
                         }
                     }
 
+        # Create login.json
         update_login_json(json_data)
 
         # File was created successfully, reload it
         settings_data = load_login_json()
     except json.decoder.JSONDecodeError as ex:
-        print('Badly formatted login.json file.\n' + str(ex))
+        print(f'Badly formatted login.json file.\n{ex}')
         print('\nIf unsure how to fix, delete the login.json file and '
               'restart the launcher.\n')
         quit_launcher()
     except OSError as ex:
-        print('File IO Error.\n' + str(ex) + '\n')
+        print(f'File IO Error.\n{ex}\n')
         quit_launcher()
 
     return settings_data
@@ -93,7 +98,7 @@ def update_login_json(settings_data):
         with open(login_json, 'w', encoding='utf-8') as settings_file:
             json.dump(settings_data, settings_file, indent=4)
     except OSError as ex:
-        print('Failed to write login.json.\n' + str(ex))
+        print(f'Failed to write login.json.\n{ex}')
         quit_launcher()
 
 
@@ -103,6 +108,7 @@ def get_launcher_path():
 
     :return: The path to the launcher.
     """
+
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         launcher_path = os.path.dirname(sys.executable)
     else:

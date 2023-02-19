@@ -238,7 +238,6 @@ def remove_account(settings_data):
     selection = helper.confirm(
         'Enter account number or 0 for Main Menu: ', 0, num_accounts
     )
-
     if selection == 0:
         print()
         return
@@ -266,7 +265,7 @@ def change_ttr_dir(settings_data):
     ttr_dir = input(
         'Enter your desired installation path or 0 for Main Menu: '
     )
-    if ttr_dir.isdecimal():
+    if ttr_dir == '0':
         print()
     else:
         settings_data['launcher']['ttr-dir'] = ttr_dir
@@ -308,7 +307,6 @@ def prepare_login(settings_data):
             selection = helper.confirm(
                 'Enter account number or 0 for Main Menu: ', 0, num_accounts
             )
-
             if selection == 0:
                 print()
                 return
@@ -335,7 +333,7 @@ def prepare_login(settings_data):
 
     # Alternative login methods
     if len(sys.argv) == 3:
-        print("Logging in with CLI arguments...")
+        print('Logging in with CLI arguments...')
         username = sys.argv[1]
         password = sys.argv[2]
     elif not use_stored_accounts:
@@ -430,7 +428,8 @@ def check_login_info(url, headers, data):
     # False means incorrect password or servers are under maintenance
     if resp_data['success'] == 'false':
         if 'banner' in resp_data:
-            print(resp_data['banner'] + '\n')
+            banner = resp_data['banner']
+            print(f'{banner}\n')
         else:
             print(
                 'Username or password may be incorrect '
@@ -466,7 +465,8 @@ def check_additional_auth(resp_data, url, headers):
     # Too many attempts were encountered
     if resp_data['success'] == 'false':
         if 'banner' in resp_data:
-            print(resp_data['banner'] + '\n')
+            banner = resp_data['banner']
+            print(f'{banner}\n')
         else:
             print(
                 'Something is wrong with your token. You may be entering an '
@@ -490,11 +490,13 @@ def check_queue(resp_data, url, headers):
 
     # Check for queueToken
     while resp_data['success'] == 'delayed':
-        print('You are queued in position ' + resp_data['position'] + '.')
+        position = resp_data['position']
+        eta = int(resp_data['eta'])
+        if int(eta) == 0:
+            eta = 1
+        print(f"You are queued in position {position}.")
 
         # Wait ETA seconds (1 second minimum) to check if no longer in queue
-        if int(resp_data['eta']) == 0:
-            eta = 1
         time.sleep(eta)
         data = {'queueToken': resp_data['queueToken']}
         resp_data = do_request(url, headers, data)
@@ -502,7 +504,8 @@ def check_queue(resp_data, url, headers):
     # Something went wrong
     if resp_data['success'] == 'false':
         if 'banner' in resp_data:
-            print(resp_data['banner'] + '\n')
+            banner = resp_data['banner']
+            print(f'{banner}\n')
         else:
             print(
                 'Something went wrong logging into the queue. '
@@ -540,6 +543,9 @@ def start_game(settings_data, resp_data):
         process = 'ttrengine'
 
     subprocess.Popen(args=process, creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+    # Change directory back to the launcher
+    os.chdir(helper.get_launcher_path())
 
 
 def soft_fail():
