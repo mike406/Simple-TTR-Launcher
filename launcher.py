@@ -423,7 +423,14 @@ def check_login_info(url, headers, data):
 
     # Attempt login
     print('Requesting login...')
-    resp_data = do_request(url, headers, data)
+    resp_data = helper.retry(
+        3,
+        5,
+        do_request,
+        url=url,
+        headers=headers,
+        data=data
+    )
 
     # False means incorrect password or servers are under maintenance
     if resp_data['success'] == 'false':
@@ -460,7 +467,14 @@ def check_additional_auth(resp_data, url, headers):
             'appToken': token.rstrip(),
             'authToken': resp_data['responseToken']
         }
-        resp_data = do_request(url, headers, data)
+        resp_data = helper.retry(
+            3,
+            5,
+            do_request,
+            url=url,
+            headers=headers,
+            data=data
+        )
 
     # Too many attempts were encountered
     if resp_data['success'] == 'false':
@@ -499,7 +513,14 @@ def check_queue(resp_data, url, headers):
         # Wait ETA seconds (1 second minimum) to check if no longer in queue
         time.sleep(eta)
         data = {'queueToken': resp_data['queueToken']}
-        resp_data = do_request(url, headers, data)
+        resp_data = helper.retry(
+            3,
+            5,
+            do_request,
+            url=url,
+            headers=headers,
+            data=data
+        )
 
     # Something went wrong
     if resp_data['success'] == 'false':

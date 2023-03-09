@@ -25,6 +25,7 @@ This module contains some common helper functions that the other modules share.
 import os
 import platform
 import sys
+import time
 import json
 
 if platform.system() == 'Windows':
@@ -150,3 +151,38 @@ def quit_launcher(ret=0):
 
     input('Press enter to quit.')
     sys.exit(ret)
+
+
+def retry(count, interval, callback, **kwargs):
+    """
+    Wrapper function to retry a certain number of times at an interval in
+    seconds. To trigger a failed attempt the callback must return False.
+
+    :param count: The amount of times to retry.
+    :param interval: The amount of seconds to wait between each retry.
+    :param callback: The callback function.
+    :**kwargs: The arguments for the callback function.
+    :return: The result of the callback.
+    """
+
+    attempt = 0
+
+    while attempt < count:
+        try:
+            result = callback(**kwargs)
+            if not result:
+                attempt += 1
+                if attempt < count:
+                    print('Retrying...')
+                    time.sleep(interval)
+            else:
+                break
+        except Exception:
+            attempt += 1
+            if attempt < count:
+                print('Retrying...')
+                time.sleep(interval)
+            else:
+                raise
+
+    return result

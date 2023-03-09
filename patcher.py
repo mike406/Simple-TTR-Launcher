@@ -31,7 +31,6 @@ import random
 import shutil
 import sys
 import tempfile
-import time
 from urllib.parse import urljoin
 import bsdiff4
 import requests
@@ -44,7 +43,7 @@ def check_update(ttr_dir):
     Checks for updates for Toontown Rewritten and installs them.
 
     :param ttr_dir: The currently set installation path in login.json.
-    :return: True on success, False if user declines.
+    :return: True on success, False if user declines or on failiure.
     """
 
     # Check if TTR installation directory exists
@@ -103,13 +102,18 @@ def patch_worker(ttr_dir):
         # Supported platform detected
         # Download the patch manifest and load it as a json object
         try:
-            patch_manifest = get_patch_manifest()
+            patch_manifest = helper.retry(
+                3,
+                5,
+                get_patch_manifest
+            )
         except requests.exceptions.RequestException:
             print(
                 'Could not download the patch manifest '
                 'Please check your internet connection '
                 'as well as https://toon.town/status\n'
             )
+
             return False
         except json.decoder.JSONDecodeError:
             print(
@@ -117,6 +121,7 @@ def patch_worker(ttr_dir):
                 "It's possible that there is a problem with "
                 'the remote server. Please try again later.\n'
             )
+
             return False
 
         # Now that we have the patch manifest we can start comparing
@@ -126,7 +131,7 @@ def patch_worker(ttr_dir):
     # Not supported so display a message to the user
     print(
         'It appears that your system is not compatible with '
-        'Toontown Rewritten. If this is an error please let me know!\n'
+        'Toontown Rewritten. If this is wrong please let me know!\n'
     )
 
     return False
@@ -184,20 +189,14 @@ def check_files(ttr_dir, patch_manifest, debug=False):
     # Stores dictionary of the downloads to process
     download_info = {}
 
-    # Get platform name
-    system = get_platform()
-
     # Check each file in the patch_manifest
     for filename in patch_manifest:
-        # Only check files applicable to our platform
-        if system in patch_manifest[filename]['only']:
-            # Get the absolute path to the file
-            abs_file = os.path.join(ttr_dir, filename)
+        # Get the absolute path to the file
+        abs_file = os.path.join(ttr_dir, filename)
 
-            # Get the download info for the file
-            check_patch(
-                abs_file, patch_manifest, download_info
-            )
+        # Get the download info for the file
+        if not check_patch(abs_file, patch_manifest, download_info):
+            return False
 
     if debug:
         print(f'DEBUG: download_info = {download_info}\n')
@@ -246,18 +245,19 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                 'post_patch_hash': <final hash after applying bsdiff patch>
             }
         }
+    :return: True on success, False on failure.
     """
 
     download_info_new = {}
     filename = os.path.basename(file)
     system = get_platform()
-    try:
-        with open(file, 'rb') as file_obj:
-            sha1sum = get_sha1sum(file_obj)
 
+    try:
         # Using the filename as the index in patch manifest, look for a patch
         if (filename in patch_manifest
                 and system in patch_manifest[filename]['only']):
+            with open(file, 'rb') as file_obj:
+                sha1sum = get_sha1sum(file_obj)
             # File found in patch_manifest, check if hash matches
             if debug:
                 print(f'DEBUG: Local hash: {sha1sum}')
@@ -270,8 +270,11 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                 if sha1sum in patch_manifest[filename]['patches']:
                     # Patch found, add as a patch download
                     patch_filename = (
-                        patch_manifest
-                        [filename]['patches'][sha1sum]['filename'])
+                        os.path.basename(
+                            patch_manifest
+                            [filename]['patches'][sha1sum]['filename']
+                        )
+                    )
                     patch_hash = (
                         patch_manifest
                         [filename]['patches'][sha1sum]['patchHash'])
@@ -310,6 +313,9 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                 if debug:
                     print(f'DEBUG: {filename} is already up to date\n')
     except FileNotFoundError:
+        if debug:
+            print(f'DEBUG: {filename} will be downloaded in full.\n')
+
         # Could not find the file on disk, add as a full download
         try:
             download_info_new = {
@@ -326,6 +332,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
             pass
 
     download_info.update(download_info_new)
+    return True
 
 
 def get_sha1sum(file_obj):
@@ -361,7 +368,11 @@ def prepare_download(ttr_dir, download_info):
 
     # Choose a download mirror
     try:
-        mirror = get_mirror()
+        mirror = helper.retry(
+            3,
+            5,
+            get_mirror
+        )
     except requests.exceptions.RequestException:
         print(
             'Could not get a download mirror. '
@@ -392,38 +403,24 @@ def prepare_download(ttr_dir, download_info):
                         bar_format=bar_format,
                         ascii=" █"
                     ):
-                attempt = 0
-                local_filename = download_info[filename]['local_filename']
+
                 # Download the file
-                while attempt < 3:
-                    try:
-                        download_file(
-                            ttr_dir,
-                            temp_dir,
-                            download_info[filename],
-                            filename,
-                            mirror
-                        )
-                    except RuntimeError:
-                        print(
-                            'Downloaded file checksum did not match.'
-                            'The update has been canceled.\n'
-                        )
-                    except FileNotFoundError:
-                        print(
-                            f'\nFailed to download {local_filename}.'
-                        )
+                result = helper.retry(
+                    3,
+                    5,
+                    download_file,
+                    ttr_dir=ttr_dir,
+                    temp_dir=temp_dir,
+                    file_info=download_info[filename],
+                    remote_filename=filename,
+                    mirror=mirror
+                )
 
-                        attempt += 1
-                        if attempt < 3:
-                            print('Retrying...')
-                            time.sleep(3)
-                    else:
-                        break
-
-                if attempt == 3:
+                # Download failed too many times
+                if not result:
                     print()
                     return False
+
             print()
     except FileNotFoundError:
         print('Failed to create temporary directory.\n')
@@ -456,42 +453,58 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
     :param file_info: The file info dictionary.
     :param remote_filename: The file to download.
     :param mirror: The download mirror.
+    :return: True on success, False on failure.
     """
 
     local_filename = file_info['local_filename']
     chunk_size = 65536
 
     # Attempt to download the file
-    with requests.get(
-                url=urljoin(mirror, remote_filename), timeout=1, stream=True
-            ) as request:
-        request.raise_for_status()
+    try:
+        with requests.get(
+                    url=urljoin(mirror, remote_filename),
+                    timeout=1,
+                    stream=True
+                ) as request:
+            request.raise_for_status()
 
-        # Open temporary file for writing
-        temp_file_path = os.path.join(temp_dir, remote_filename)
-        with open(temp_file_path, 'w+b') as comp_file:
-            # Display progress of writing the file with tqdm
-            with tqdm.wrapattr(
-                        comp_file,
-                        'write',
-                        total=int(request.headers.get('Content-Length')),
-                        desc=f'Downloading {local_filename}',
-                        leave=False,
-                        ascii=" █"
-                    ) as fobj:
+            # Open temporary file for writing
+            temp_file_path = os.path.join(temp_dir, remote_filename)
+            with open(temp_file_path, 'w+b') as comp_file:
+                # Display progress of writing the file with tqdm
+                with tqdm.wrapattr(
+                            comp_file,
+                            'write',
+                            total=int(request.headers.get('Content-Length')),
+                            desc=f'Downloading {local_filename}',
+                            leave=False,
+                            ascii=" █"
+                        ) as fobj:
 
-                # Write to the file in chunks
-                for chunk in request.iter_content(chunk_size=chunk_size):
-                    fobj.write(chunk)
+                    # Write to the file in chunks
+                    for chunk in request.iter_content(chunk_size=chunk_size):
+                        fobj.write(chunk)
 
-            # Open file to write decompressed data to
-            with open(
-                        os.path.join(temp_dir, local_filename), 'w+b'
-                    ) as decomp_file:
-                # Process the downloaded file and write its content
-                process_downloaded_file(
-                    ttr_dir, comp_file, decomp_file, file_info
-                )
+                # Open file to write decompressed data to
+                with open(
+                            os.path.join(temp_dir, local_filename), 'w+b'
+                        ) as decomp_file:
+                    # Process the downloaded file and write its content
+                    process_downloaded_file(
+                        ttr_dir, comp_file, decomp_file, file_info
+                    )
+    except RuntimeError:
+        print(
+            f'\nDownloaded file {local_filename} checksum did not match.'
+        )
+
+        return False
+    except (FileNotFoundError, requests.exceptions.RequestException):
+        print(f'\nFailed to download {local_filename}.')
+
+        return False
+
+    return True
 
 
 def process_downloaded_file(ttr_dir, comp_file, decomp_file, file_info):
