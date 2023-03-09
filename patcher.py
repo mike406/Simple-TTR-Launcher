@@ -43,7 +43,7 @@ def check_update(ttr_dir):
     Checks for updates for Toontown Rewritten and installs them.
 
     :param ttr_dir: The currently set installation path in login.json.
-    :return: True on success, False if user declines or on failiure.
+    :return: True on success, False if user declines or on failure.
     """
 
     # Check if TTR installation directory exists
