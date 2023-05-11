@@ -31,11 +31,12 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import helper
 
 
-def manage_password_encryption(settings_data):
+def manage_password_encryption(settings_data, upgrade=False):
     """
     Allows the user to enable or disable password encryption.
 
     :param settings_data: The settings from login.json using json.load().
+    :param upgrade: Suppresses some message output when upgrading hashing.
     """
 
     if settings_data['launcher']['use-password-encryption']:
@@ -62,19 +63,25 @@ def manage_password_encryption(settings_data):
                 print('Decrypting your accounts...')
                 salt = get_salt(settings_data)
                 settings_data = decrypt_accounts(
-                    master_password_encoded, salt, settings_data
+                    master_password_encoded,
+                    salt,
+                    settings_data,
+                    get_hashing_params()
                 )
                 print(
                     '\nYour accounts have been decrypted '
                     'and the master password has been removed.\n'
                 )
     else:
-        print(
-            'You can use a master password to encrypt your stored accounts.'
-            '\nYou will need to enter this password each time the launcher '
-            'starts.\nYou can turn this feature off (and decrypt your '
-            'passwords) by choosing the option again from the Main Menu.'
-        )
+        if not upgrade:
+            print(
+                'You can use a master password to encrypt your stored '
+                'accounts.\n'
+                'You will need to enter this password each time the launcher '
+                'starts.\n'
+                'You can turn this feature off (and decrypt your '
+                'passwords) by choosing the option again from the Main Menu.'
+            )
 
         # Create the master password
         master_password = pwinput.pwinput('Create a master password: ')
@@ -113,7 +120,7 @@ def encrypt(master_password_encoded, salt, data):
     """
 
     # Derive our key using master password and salt
-    key = derive_key(master_password_encoded, salt)
+    key = derive_key(master_password_encoded, salt, get_hashing_params())
 
     # Encrypt the data
     fernet = Fernet(key)
@@ -134,7 +141,7 @@ def decrypt(master_password_encoded, salt, data):
     """
 
     # Derive our key using master password and salt
-    key = derive_key(master_password_encoded, salt)
+    key = derive_key(master_password_encoded, salt, get_hashing_params())
 
     # Decrypt the data
     fernet = Fernet(key)
@@ -156,8 +163,16 @@ def encrypt_accounts(master_password_encoded, salt, settings_data):
 
     num_accounts = len(settings_data['accounts'])
 
+    # Set Scrypt parameters
+    (scrypt_n, scrypt_r, scrypt_p) = get_hashing_params()
+    settings_data['launcher']['hashing-params'] = {
+        'n': scrypt_n,
+        'r': scrypt_r,
+        'p': scrypt_p
+    }
+
     # Derive our key using master password and salt
-    key = derive_key(master_password_encoded, salt)
+    key = derive_key(master_password_encoded, salt, get_hashing_params())
 
     # Use Fernet class to encrypt each password using our key
     fernet = Fernet(key)
@@ -177,20 +192,22 @@ def encrypt_accounts(master_password_encoded, salt, settings_data):
     return settings_data
 
 
-def decrypt_accounts(master_password_encoded, salt, settings_data):
+def decrypt_accounts(
+        master_password_encoded, salt, settings_data, hashing_params=None):
     """
     Decrypts all currently stored accounts using the master password and salt.
 
     :param master_password_encoded: The master password as a byte string.
     :param salt: The salt as a byte string.
     :param settings_data: The settings from login.json using json.load().
+    :param hashing_params: Hashing parameters for Scrypt as a tuple.
     :return: The updated settings_data object.
     """
 
     num_accounts = len(settings_data['accounts'])
 
     # Derive our key using master password and salt
-    key = derive_key(master_password_encoded, salt)
+    key = derive_key(master_password_encoded, salt, hashing_params)
 
     # Use Fernet class to decrypt each password using our key
     fernet = Fernet(key)
@@ -209,19 +226,110 @@ def decrypt_accounts(master_password_encoded, salt, settings_data):
     return settings_data
 
 
-def derive_key(master_password_encoded, salt):
+def derive_key(master_password_encoded, salt, hashing_params):
     """
     Wrapper function for deriving the key using the master password and salt.
 
     :param master_password_encoded: The master password as a byte string.
     :param salt: The salt as a byte string.
+    :param hashing_params: Hashing parameters for Scrypt as a tuple.
     :return: The derived key.
     """
 
-    kdf = Scrypt(salt=salt, length=32, n=2**14, r=8, p=1)
+    (scrypt_n, scrypt_r, scrypt_p) = hashing_params
+
+    kdf = Scrypt(salt=salt, length=32, n=scrypt_n, r=scrypt_r, p=scrypt_p)
     key = base64.urlsafe_b64encode(kdf.derive(master_password_encoded))
 
     return key
+
+
+def check_hashing_params(
+        master_password_encoded, salt, settings_data, check_mismatch=True):
+    """
+    Checks for updated password hashing paramters and prompts the user to
+    upgrade their password encryption if new settings are available.
+    Optionally set check_mismatch to False to skip checking for new
+    hashing parameters and instead return the currently used ones.
+
+    :param master_password_encoded: The master password as a byte string.
+    :param salt: The salt as a byte string.
+    :param settings_data: The settings from login.json using json.load().
+    :param check_mismatch: For checking if there is a mismatch in login.json's
+                           hashing parameters compared to what is expected.
+    :return: A tuple containing Scrypt parameters N, r, p.
+    """
+    if 'hashing-params' in settings_data['launcher']:
+        # Fetch current parameters
+        try:
+            scrypt_n_cur = settings_data['launcher']['hashing-params']['n']
+            scrypt_r_cur = settings_data['launcher']['hashing-params']['r']
+            scrypt_p_cur = settings_data['launcher']['hashing-params']['p']
+        except KeyError:
+            print(
+                'Invalid hashing settings in login.json. '
+                'You will need to delete the login.json file and start over.\n'
+            )
+            helper.quit_launcher()
+    else:
+        # Use legacy default to maintain compatibility with older launcher
+        scrypt_n_cur = 2**14
+        scrypt_r_cur = 8
+        scrypt_p_cur = 1
+
+    if check_mismatch:
+        # Fetch required Scrypt parameters
+        (scrypt_n, scrypt_r, scrypt_p) = get_hashing_params()
+
+        # Compare with what is in settings_data
+        # If there is a mismatch, decrypt everything and re-encrypt
+        mismatch = False
+        if scrypt_n != scrypt_n_cur:
+            mismatch = True
+        if scrypt_r != scrypt_r_cur:
+            mismatch = True
+        if scrypt_p != scrypt_p_cur:
+            mismatch = True
+
+        if mismatch:
+            # Need to re-encrypt all data with newest parameters
+            print(
+                'To improve security your data will need to be re-encrypted.'
+            )
+
+            # Store new hashing params
+            settings_data['launcher']['hashing-params'] = {
+                'n': scrypt_n,
+                'r': scrypt_r,
+                'p': scrypt_p
+            }
+
+            # Decrypt everything using the current parameters
+            decrypt_accounts(
+                master_password_encoded,
+                salt,
+                settings_data,
+                (scrypt_n_cur, scrypt_r_cur, scrypt_p_cur)
+            )
+
+            # Re-encrypt using the new parameters
+            manage_password_encryption(settings_data, True)
+            salt = get_salt(settings_data)
+    else:
+        # Just return the current parameters
+        return (scrypt_n_cur, scrypt_r_cur, scrypt_p_cur)
+
+    return (scrypt_n, scrypt_r, scrypt_p)
+
+
+def get_hashing_params():
+    """
+    Retrieves required N, r and p parameters for Scrypt.
+
+    :return: A tuple containing Scrypt parameters N, r, p
+    """
+
+    return (2**17, 8, 1)
 
 
 def get_salt(settings_data):
@@ -242,6 +350,8 @@ def verify_master_password(
     confirm their password and does this by attempting to decrypt the test
     value in settings_data['launcher']['password-verification'].
 
+    :param settings_data: The settings from login.json using json.load().
+    :param msg: The message to print when too many passwords were entered.
     :return: The master password encoded as a UTF-8 byte string on success
              or False if the user enters the password incorrect 3 times.
     """
@@ -255,7 +365,13 @@ def verify_master_password(
 
             # Derive our key using master password and salt
             salt = get_salt(settings_data)
-            key = derive_key(master_password_encoded, salt)
+            hashing_params = check_hashing_params(
+                None,
+                salt,
+                settings_data,
+                False
+                )
+            key = derive_key(master_password_encoded, salt, hashing_params)
 
             # Try to decrypt the test value in password-verification
             test = settings_data['launcher']['password-verification'].encode(

@@ -596,7 +596,16 @@ def init():
             settings_data['launcher']['use-password-encryption'] = False
         if settings_data['launcher']['use-password-encryption']:
             master_password = encrypt.verify_master_password(settings_data)
-            if not master_password:
+
+            if master_password:
+                # If master password is verified, check for new hashing params
+                encrypt.check_hashing_params(
+                    master_password,
+                    encrypt.get_salt(settings_data),
+                    settings_data
+                )
+            else:
+                # Wrong password entered too many times
                 helper.quit_launcher()
 
         redraw = True
