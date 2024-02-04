@@ -18,9 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Simple TTR Launcher. If not, see <http://www.gnu.org/licenses/>.
 
-"""
-Handles downloading, patching and installation of the game files.
-"""
+"""Handles downloading, patching and installation of the game files."""
 
 import bz2
 import hashlib
@@ -39,8 +37,7 @@ import helper
 
 
 def check_update(ttr_dir):
-    """
-    Checks for updates for Toontown Rewritten and installs them.
+    """Checks for updates for Toontown Rewritten and installs them.
 
     :param ttr_dir: The currently set installation path in login.json.
     :return: True on success, False if user declines or on failure.
@@ -58,8 +55,7 @@ def check_update(ttr_dir):
 
 
 def check_install_path(ttr_dir):
-    """
-    Checks if the installation path exists.
+    """Checks if the installation path exists.
     Asks user to create the directory if it does not exist.
 
     :param ttr_dir: The currently set installation path in login.json.
@@ -69,18 +65,16 @@ def check_install_path(ttr_dir):
         ttr_dir_abs = os.path.abspath(ttr_dir)
         print(f'The path {ttr_dir_abs} does not exist. Create it?')
         answer = helper.confirm(
-            'Enter 1 to confirm or 0 for Main Menu: ', 0, 1
-        )
-        print()
+            'Enter 1 to confirm or 0 for Main Menu: ', 0, 1)
+
         if answer == 1:
             try:
                 os.makedirs(ttr_dir)
             except OSError:
                 print(
-                    'Failed to create directory.\n'
+                    '\nFailed to create directory.\n'
                     'Ensure you have permission to write to the '
-                    f'path specified: {ttr_dir_abs}\n'
-                )
+                    f'path specified: {ttr_dir_abs}')
 
                 return False
         else:
@@ -90,8 +84,7 @@ def check_install_path(ttr_dir):
 
 
 def patch_worker(ttr_dir):
-    """
-    Runs the patching process for Toontown Rewritten.
+    """Runs the patching process for Toontown Rewritten.
 
     :param ttr_dir: The currently set installation path in login.json.
     :return: True on success, False on failure.
@@ -103,24 +96,19 @@ def patch_worker(ttr_dir):
         # Download the patch manifest and load it as a json object
         try:
             patch_manifest = helper.retry(
-                3,
-                5,
-                get_patch_manifest
-            )
+                3, 5, get_patch_manifest)
         except requests.exceptions.RequestException:
             print(
-                'Could not download the patch manifest '
+                '\nCould not download the patch manifest '
                 'Please check your internet connection '
-                'as well as https://toon.town/status\n'
-            )
+                'as well as https://toon.town/status')
 
             return False
         except json.decoder.JSONDecodeError:
             print(
-                'Could not decode the patch manifest. '
+                '\nCould not decode the patch manifest. '
                 "It's possible that there is a problem with "
-                'the remote server. Please try again later.\n'
-            )
+                'the remote server. Please try again later.')
 
             return False
 
@@ -130,16 +118,14 @@ def patch_worker(ttr_dir):
 
     # Not supported so display a message to the user
     print(
-        'It appears that your system is not compatible with '
-        'Toontown Rewritten. If this is wrong please let me know!\n'
-    )
+        '\nIt appears that your system is not compatible with '
+        'Toontown Rewritten. If this is wrong please let me know!')
 
     return False
 
 
 def get_platform():
-    """
-    Checks if TTR is supported on the system.
+    """Checks if TTR is supported on the system.
 
     :return: The platform name or None if system is not supported.
     """
@@ -160,8 +146,8 @@ def get_platform():
 
 
 def get_patch_manifest():
-    """
-    Downloads the Toontown Rewritten patch manifest and stores as json object.
+    """Downloads the Toontown Rewritten patch manifest and stores as
+    json object.
 
     :return: The patch manifest as a json object
     """
@@ -175,8 +161,7 @@ def get_patch_manifest():
 
 
 def check_files(ttr_dir, patch_manifest, debug=False):
-    """
-    Check the local game files against the files in the patch manifest.
+    """Check the local game files against the files in the patch manifest.
     For any files that don't exist locally, download the full file fresh.
     For files that do exist locally, check if it needs to be updated.
 
@@ -199,7 +184,7 @@ def check_files(ttr_dir, patch_manifest, debug=False):
             return False
 
     if debug:
-        print(f'DEBUG: download_info = {download_info}\n')
+        print(f'DEBUG: download_info = {download_info}')
 
     if download_info:
         # New downloads were found
@@ -210,8 +195,7 @@ def check_files(ttr_dir, patch_manifest, debug=False):
 
 
 def check_patch(file, patch_manifest, download_info, debug=False):
-    """
-    Checks if there is a patch for the specified file. If the file cannot
+    """Checks if there is a patch for the specified file. If the file cannot
     be found on disk, assume it to be a new download request.
 
     :param file: The absolute path of the file to patch check.
@@ -262,8 +246,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
             if debug:
                 print(f'DEBUG: Local hash: {sha1sum}')
                 print(
-                    f'DEBUG: Remote hash: {patch_manifest[filename]["hash"]}'
-                )
+                    f'DEBUG: Remote hash: {patch_manifest[filename]["hash"]}')
 
             if sha1sum != patch_manifest[filename]['hash']:
                 # Hash does not match, see if match is found in patches
@@ -272,9 +255,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                     patch_filename = (
                         os.path.basename(
                             patch_manifest
-                            [filename]['patches'][sha1sum]['filename']
-                        )
-                    )
+                            [filename]['patches'][sha1sum]['filename']))
                     patch_hash = (
                         patch_manifest
                         [filename]['patches'][sha1sum]['patchHash'])
@@ -307,14 +288,14 @@ def check_patch(file, patch_manifest, download_info, debug=False):
                     }
 
                     if debug:
-                        print(f'DEBUG: Patch not found for {filename}\n')
+                        print(f'DEBUG: Patch not found for {filename}')
             else:
                 # Hash matches, file is already up to date
                 if debug:
-                    print(f'DEBUG: {filename} is already up to date\n')
+                    print(f'DEBUG: {filename} is already up to date')
     except FileNotFoundError:
         if debug:
-            print(f'DEBUG: {filename} will be downloaded in full.\n')
+            print(f'DEBUG: {filename} will be downloaded in full.')
 
         # Could not find the file on disk, add as a full download
         try:
@@ -336,8 +317,7 @@ def check_patch(file, patch_manifest, download_info, debug=False):
 
 
 def get_sha1sum(file_obj):
-    """
-    Hashes and returns sha1sum of the contents of a file object.
+    """Hashes and returns sha1sum of the contents of a file object.
 
     :param file: The file object.
     :return: The sha1sum of the file.
@@ -357,8 +337,7 @@ def get_sha1sum(file_obj):
 
 
 def prepare_download(ttr_dir, download_info):
-    """
-    Prepares the download by requesting a download mirror endpoint and sets
+    """Prepares the download by requesting a download mirror endpoint and sets
     up a temporary directory for staging.
 
     :param ttr_dir: The currently set installation path in login.json.
@@ -369,23 +348,18 @@ def prepare_download(ttr_dir, download_info):
     # Choose a download mirror
     try:
         mirror = helper.retry(
-            3,
-            5,
-            get_mirror
-        )
+            3, 5, get_mirror)
     except requests.exceptions.RequestException:
         print(
-            'Could not get a download mirror. '
+            '\nCould not get a download mirror. '
             'Please check your internet connection '
-            'as well as https://toon.town/status\n'
-        )
+            'as well as https://toon.town/status')
         return False
     except (json.decoder.JSONDecodeError, KeyError):
         print(
-            'Could not decode the mirrors list. '
+            '\nCould not decode the mirrors list. '
             "It's possible that there is a problem with "
-            'the remote server. Please try again later.\n'
-        )
+            'the remote server. Please try again later.')
         return False
 
     try:
@@ -406,32 +380,22 @@ def prepare_download(ttr_dir, download_info):
 
                 # Download the file
                 result = helper.retry(
-                    3,
-                    5,
-                    download_file,
-                    ttr_dir=ttr_dir,
-                    temp_dir=temp_dir,
-                    file_info=download_info[filename],
-                    remote_filename=filename,
-                    mirror=mirror
-                )
+                    3, 5, download_file, ttr_dir=ttr_dir,
+                    temp_dir=temp_dir, file_info=download_info[filename],
+                    remote_filename=filename, mirror=mirror)
 
                 # Download failed too many times
                 if not result:
-                    print()
                     return False
-
-            print()
     except FileNotFoundError:
-        print('Failed to create temporary directory.\n')
+        print('\nFailed to create temporary directory.')
         return False
 
     return True
 
 
 def get_mirror():
-    """
-    Chooses a download mirror endpoint.
+    """Chooses a download mirror endpoint.
 
     :return: The mirror URL.
     """
@@ -445,8 +409,7 @@ def get_mirror():
 
 
 def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
-    """
-    Downloads a file from the mirror.
+    """Downloads a file from the mirror.
 
     :param ttr_dir: The currently set installation path in login.json.
     :param temp_dir: The temporary directory to download files to.
@@ -491,12 +454,10 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
                         ) as decomp_file:
                     # Process the downloaded file and write its content
                     process_downloaded_file(
-                        ttr_dir, comp_file, decomp_file, file_info
-                    )
+                        ttr_dir, comp_file, decomp_file, file_info)
     except RuntimeError:
         print(
-            f'\nDownloaded file {local_filename} checksum did not match.'
-        )
+            f'\nDownloaded file {local_filename} checksum did not match.')
 
         return False
     except (FileNotFoundError, requests.exceptions.RequestException):
@@ -508,8 +469,7 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
 
 
 def process_downloaded_file(ttr_dir, comp_file, decomp_file, file_info):
-    """
-    Processes the downloaded file by decompressing the data and saving to
+    """Processes the downloaded file by decompressing the data and saving to
     the TTR installation directory.
 
     :param ttr_dir: The currently set installation path in login.json.
@@ -561,8 +521,7 @@ def process_downloaded_file(ttr_dir, comp_file, decomp_file, file_info):
 
 
 def decompress_bz2(comp_file, decomp_file):
-    """
-    Decompress the downloaded bz2 file.
+    """Decompress the downloaded bz2 file.
 
     :param comp_file_path: The path to the compressed file.
     :param decomp_file_path: The path the decompressed file will be written to.

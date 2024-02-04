@@ -18,8 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with Simple TTR Launcher. If not, see <http://www.gnu.org/licenses/>.
 
-"""
-This module contains some common helper functions that the other modules share.
+"""This module contains some common helper functions that the other
+modules share.
 """
 
 import os
@@ -33,8 +33,8 @@ if platform.system() == 'Windows':
 
 
 def load_login_json():
-    """
-    Loads the login.json settings file and creates one if it doesn't exist.
+    """Loads the login.json settings file and creates one if it doesn't
+    exist.
 
     :return: The settings from login.json using json.load().
     """
@@ -54,8 +54,7 @@ def load_login_json():
                 ttr_dir = ttr_dir.rstrip('/\\')
             else:
                 ttr_dir = os.path.join(
-                    get_launcher_path(), 'Toontown Rewritten'
-                )
+                    get_launcher_path(), 'Toontown Rewritten')
         except OSError:
             ttr_dir = os.path.join(get_launcher_path(), 'Toontown Rewritten')
 
@@ -77,18 +76,17 @@ def load_login_json():
     except json.decoder.JSONDecodeError as ex:
         print(f'Badly formatted login.json file.\n{ex}')
         print('\nIf unsure how to fix, delete the login.json file and '
-              'restart the launcher.\n')
+              'restart the launcher.')
         quit_launcher()
     except OSError as ex:
-        print(f'File IO Error.\n{ex}\n')
+        print(f'File IO Error.\n{ex}')
         quit_launcher()
 
     return settings_data
 
 
 def update_login_json(settings_data):
-    """
-    Updates the login.json settings file with the settings_data object.
+    """Updates the login.json settings file with the settings_data object.
 
     :param settings_data: The settings from login.json using json.load().
     """
@@ -104,8 +102,7 @@ def update_login_json(settings_data):
 
 
 def get_launcher_path():
-    """
-    Gets path to the running launcher's directory.
+    """Gets path to the running launcher's directory.
 
     :return: The path to the launcher.
     """
@@ -119,8 +116,7 @@ def get_launcher_path():
 
 
 def confirm(text, lower_bound, upper_bound):
-    """
-    Helper function for selecting a numerical choice from the end user.
+    """Helper function for selecting a numerical choice from the end user.
 
     :param text: The text to display in the input prompt.
     :param lower_bound: The lowest possible numerical option.
@@ -143,8 +139,7 @@ def confirm(text, lower_bound, upper_bound):
 
 
 def quit_launcher(ret=0):
-    """
-    Nicely quit the launcher.
+    """Nicely quit the launcher.
 
     :param ret: The return value, defaults to 0.
     """
@@ -154,35 +149,40 @@ def quit_launcher(ret=0):
 
 
 def retry(count, interval, callback, **kwargs):
-    """
-    Wrapper function to retry a certain number of times at an interval in
-    seconds. To trigger a failed attempt the callback must return False.
+    """Wrapper function to try executing a function a certain number of times
+    at an interval in seconds. To trigger a failed attempt the callback
+    must return a falsy value or raise an exception. None is not treated as
+    failure.
 
-    :param count: The amount of times to retry.
-    :param interval: The amount of seconds to wait between each retry.
+    :param count: The amount of times to try executing a function.
+    :param interval: The amount of seconds to wait between each attempt.
     :param callback: The callback function.
-    :**kwargs: The arguments for the callback function.
+    :param **kwargs: The arguments for the callback function.
     :return: The result of the callback.
     """
 
+    exception = None
     attempt = 0
 
     while attempt < count:
         try:
             result = callback(**kwargs)
+            if result is None:
+                break
             if not result:
-                attempt += 1
                 if attempt < count:
                     print('Retrying...')
                     time.sleep(interval)
             else:
                 break
-        except Exception:
-            attempt += 1
+        except Exception as ex:
+            exception = ex
             if attempt < count:
                 print('Retrying...')
                 time.sleep(interval)
-            else:
-                raise
+        attempt += 1
+
+    if exception:
+        raise exception
 
     return result
