@@ -1,0 +1,5 @@
+bsdiff4
+cryptography
+pwinput
+requests
+tqdm
