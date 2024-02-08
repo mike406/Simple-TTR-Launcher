@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""Contains the Launcher class which handles all main launcher functionality.
+"""Contains the Launcher class which handles all main launcher
+functionality.
 """
 
 import os
@@ -189,10 +190,6 @@ class Launcher:
         line arguments
         """
 
-        # Check for game updates, only continue logging in if it succeeds
-        if not self.__check_update():
-            return
-
         # Check if use-stored-accounts is set
         use_stored_accounts = self.settings_data[
             'launcher']['use-stored-accounts']
@@ -257,12 +254,15 @@ class Launcher:
 
         encrypt.manage_password_encryption(self.settings_data)
 
-    def __check_update(self):
+    def __check_update(self, patch_manifest):
         """
         Checks for updates for Toontown Rewritten and installs them.
+
+        :param patch_manifest: The patch manifest URL path.
         """
 
-        return patcher.check_update(self.settings_data['launcher']['ttr-dir'])
+        return patcher.check_update(
+            self.settings_data['launcher']['ttr-dir'], patch_manifest)
 
     def __login_worker(self, username, password):
         """Orchestrates calling functions for authentication, ToonGuard, 2FA
@@ -302,6 +302,10 @@ class Launcher:
                 'as well as https://toon.town/status')
             self.__soft_fail()
         else:
+            # Check for game updates, only continue logging in if it succeeds
+            if not self.__check_update(resp_data['manifest']):
+                return
+
             # Start game
             try:
                 self.__start_game(resp_data)

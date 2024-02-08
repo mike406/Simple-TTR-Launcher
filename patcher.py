@@ -18,10 +18,11 @@ from tqdm.auto import tqdm
 import helper
 
 
-def check_update(ttr_dir):
+def check_update(ttr_dir, patch_manifest):
     """Checks for updates for Toontown Rewritten and installs them.
 
     :param ttr_dir: The currently set installation path in login.json.
+    :param patch_manifest: The patch manifest URL path.
     :return: True on success, False if user declines or on failure.
     """
 
@@ -30,7 +31,7 @@ def check_update(ttr_dir):
         return False
 
     # Downloads and installs any new game files
-    if not patch_worker(ttr_dir):
+    if not patch_worker(ttr_dir, patch_manifest):
         return False
 
     return True
@@ -65,10 +66,11 @@ def check_install_path(ttr_dir):
     return True
 
 
-def patch_worker(ttr_dir):
+def patch_worker(ttr_dir, patch_manifest):
     """Runs the patching process for Toontown Rewritten.
 
     :param ttr_dir: The currently set installation path in login.json.
+    :param patch_manifest: The patch manifest URL path.
     :return: True on success, False on failure.
     """
 
@@ -78,7 +80,7 @@ def patch_worker(ttr_dir):
         # Download the patch manifest and load it as a json object
         try:
             patch_manifest = helper.retry(
-                3, 5, get_patch_manifest)
+                3, 5, get_patch_manifest, patch_manifest=patch_manifest)
         except requests.exceptions.RequestException:
             print(
                 '\nCould not download the patch manifest '
@@ -127,14 +129,15 @@ def get_platform():
     return dist
 
 
-def get_patch_manifest():
+def get_patch_manifest(patch_manifest):
     """Downloads the Toontown Rewritten patch manifest and stores as
     json object.
 
+    :param patch_manifest: The patch manifest URL path.
     :return: The patch manifest as a json object
     """
 
-    remote_file = 'https://cdn.toontownrewritten.com/content/patchmanifest.txt'
+    remote_file = f'https://cdn.toontownrewritten.com{patch_manifest}'
     request = requests.get(url=remote_file, timeout=30)
     request.raise_for_status()
     patch_manifest = request.json()
