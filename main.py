@@ -82,21 +82,31 @@ def show_options_menu(launcher, clear=True):
     """Displays menu for additional launcher options.
 
     :param launcher: A Launcher object.
+    :param clear: Flag to clear the console upon opening options menu.
     """
 
     if clear:
         helper.clear()
 
+    setting_key = 'use-password-encryption'
     choice_encrypt = 'Enable'
-    if launcher.settings_data['launcher']['use-password-encryption']:
+    if setting_key not in launcher.settings_data['launcher']:
+        launcher.settings_data['launcher'][setting_key] = False
+    if launcher.settings_data['launcher'][setting_key]:
         choice_encrypt = 'Disable'
 
+    setting_key = 'use-stored-accounts'
     choice_account_storage = 'Enable'
-    if launcher.settings_data['launcher']['use-stored-accounts']:
+    if setting_key not in launcher.settings_data['launcher']:
+        launcher.settings_data['launcher'][setting_key] = False
+    if launcher.settings_data['launcher'][setting_key]:
         choice_account_storage = 'Disable'
 
+    setting_key = 'display-logging'
     choice_logging = 'Enable'
-    if launcher.settings_data['launcher']['display-logging']:
+    if setting_key not in launcher.settings_data['launcher']:
+        launcher.settings_data['launcher'][setting_key] = False
+    if launcher.settings_data['launcher'][setting_key]:
         choice_logging = 'Disable'
 
     menu = {
