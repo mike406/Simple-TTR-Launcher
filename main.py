@@ -9,30 +9,29 @@ from launcher import Launcher
 
 
 def show_menu(launcher, redraw=True):
-    """Displays the Main Menu of the launcher and handles menu item selection.
+    """Displays the Main Menu of the launcher.
 
+    :param launcher: A Launcher object.
     :param redraw: Used to check if menu list should be output to console.
     :return: The new redraw status flag.
     """
 
-    # Skip menu if using command line args
-    if len(sys.argv) == 3:
-        helper.quit_launcher()
+    menu = {
+        1: 'Play',
+        2: 'Add an account',
+        3: 'Change a stored password',
+        4: 'Remove an account',
+        5: 'More options',
+        6: 'Toontown Rewritten website',
+        7: 'Toontown Rewritten server status',
+        8: 'ToonHQ (Invasions, Groups and more!)'
+    }
 
-    num_menu_items = 10
     if redraw:
-        print('### Main Menu ###')
-        print('1. Play')
-        print('2. Add an account')
-        print('3. Change a stored password')
-        print('4. Remove an account')
-        print('5. Change Toontown Rewritten installation path')
-        print('6. Enable/Disable password encryption')
-        print('7. Toontown Rewritten website')
-        print('8. Toontown Rewritten server status')
-        print('9. ToonHQ.org')
+        for num, item in menu.items():
+            print(f'{num}. {item}')
 
-    redraw = choose_menu_item(launcher, num_menu_items)
+    redraw = choose_menu_item(launcher, len(menu))
 
     return redraw
 
@@ -40,7 +39,9 @@ def show_menu(launcher, redraw=True):
 def choose_menu_item(launcher, num_menu_items):
     """Handles menu picker logic.
 
-    :param num_menu_items: The number of menu items that the user can choose.
+    :param launcher: A Launcher object.
+    :param num_menu_items: The number of menu items that the user can
+                           choose.
     :return: The new redraw status flag.
     """
 
@@ -60,24 +61,90 @@ def choose_menu_item(launcher, num_menu_items):
         print()
         launcher.remove_account()
     elif selection == 5:
-        print()
-        launcher.change_ttr_dir()
+        show_options_menu(launcher)
     elif selection == 6:
-        print()
-        launcher.manage_password_encryption()
-    elif selection == 7:
+        print('\nOpened web browser.')
         webbrowser.open('https://toon.town')
         redraw = False
-    elif selection == 8:
+    elif selection == 7:
+        print('\nOpened web browser.')
         webbrowser.open('https://toon.town/status')
         redraw = False
-    elif selection == 9:
+    elif selection == 8:
+        print('\nOpened web browser.')
         webbrowser.open('https://toonhq.org')
         redraw = False
-    elif selection == 10:
-        sys.exit()
 
     return redraw
+
+
+def show_options_menu(launcher, clear=True):
+    """Displays menu for additional launcher options.
+
+    :param launcher: A Launcher object.
+    """
+
+    if clear:
+        helper.clear()
+
+    choice_encrypt = 'Enable'
+    if launcher.settings_data['launcher']['use-password-encryption']:
+        choice_encrypt = 'Disable'
+
+    choice_account_storage = 'Enable'
+    if launcher.settings_data['launcher']['use-stored-accounts']:
+        choice_account_storage = 'Disable'
+
+    choice_logging = 'Enable'
+    if launcher.settings_data['launcher']['display-logging']:
+        choice_logging = 'Disable'
+
+    menu = {
+        1: 'Change Toontown Rewritten installation path',
+        2: f'{choice_encrypt} password encryption',
+        3: f'{choice_account_storage} account storage',
+        4: f'{choice_logging} showing game log in console',
+    }
+
+    for num, item in menu.items():
+        print(f'{num}. {item}')
+
+    choose_options_menu_item(launcher, len(menu))
+
+
+def choose_options_menu_item(launcher, num_menu_items):
+    """Options submenu
+
+    :param launcher: A Launcher object.
+    :param num_menu_items: The number of menu items that the user can
+                           choose.
+    """
+
+    clear = True
+    selection = helper.confirm(
+        'Choose an option or 0 to return: ', 0, num_menu_items)
+
+    if selection == 1:
+        helper.clear()
+        launcher.change_ttr_dir()
+        print()
+        clear = False
+    if selection == 2:
+        helper.clear()
+        launcher.manage_password_encryption()
+        print()
+        clear = False
+    elif selection == 3:
+        launcher.settings_data['launcher']['use-stored-accounts'] = (
+            not launcher.settings_data['launcher']['use-stored-accounts'])
+        helper.update_launcher_json(launcher.settings_data)
+    elif selection == 4:
+        launcher.settings_data['launcher']['display-logging'] = (
+            not launcher.settings_data['launcher']['display-logging'])
+        helper.update_launcher_json(launcher.settings_data)
+
+    if selection != 0:
+        show_options_menu(launcher, clear)
 
 
 def main():

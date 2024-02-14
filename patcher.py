@@ -21,7 +21,7 @@ import helper
 def check_update(ttr_dir, patch_manifest):
     """Checks for updates for Toontown Rewritten and installs them.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
     :param patch_manifest: The patch manifest URL path.
     :return: True on success, False if user declines or on failure.
     """
@@ -41,14 +41,14 @@ def check_install_path(ttr_dir):
     """Checks if the installation path exists.
     Asks user to create the directory if it does not exist.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
     """
 
     if not os.path.exists(ttr_dir):
         ttr_dir_abs = os.path.abspath(ttr_dir)
         print(f'The path {ttr_dir_abs} does not exist. Create it?')
         answer = helper.confirm(
-            'Enter 1 to confirm or 0 for Main Menu: ', 0, 1)
+            'Enter 1 to confirm or 0 to cancel: ', 0, 1)
 
         if answer == 1:
             try:
@@ -69,14 +69,14 @@ def check_install_path(ttr_dir):
 def patch_worker(ttr_dir, patch_manifest):
     """Runs the patching process for Toontown Rewritten.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
     :param patch_manifest: The patch manifest URL path.
     :return: True on success, False on failure.
     """
 
-    system = get_platform()
+    system = get_system()
     if system is not None:
-        # Supported platform detected
+        # Supported system detected
         # Download the patch manifest and load it as a json object
         try:
             patch_manifest = helper.retry(
@@ -98,7 +98,7 @@ def patch_worker(ttr_dir, patch_manifest):
 
         # Now that we have the patch manifest we can start comparing
         # the file list to the files in the local install path
-        return check_files(ttr_dir, patch_manifest)
+        return check_files(ttr_dir, system, patch_manifest)
 
     # Not supported so display a message to the user
     print(
@@ -108,25 +108,23 @@ def patch_worker(ttr_dir, patch_manifest):
     return False
 
 
-def get_platform():
+def get_system():
     """Checks if TTR is supported on the system.
 
-    :return: The platform name or None if system is not supported.
+    :return: The system name or None if system is not supported.
     """
 
-    supported_dist = ['darwin', 'linux', 'linux2', 'win32', 'win64']
+    supported_systems = ['darwin', 'linux', 'linux2', 'win32', 'win64']
+    system = sys.platform
     if platform.system() == 'Windows':
+        system = 'win32'
         if platform.machine().endswith('64'):
-            dist = 'win64'
-        else:
-            dist = 'win32'
-    else:
-        dist = sys.platform
+            system = 'win64'
 
-    if dist not in supported_dist:
-        dist = None
+    if system not in supported_systems:
+        system = None
 
-    return dist
+    return system
 
 
 def get_patch_manifest(patch_manifest):
@@ -145,12 +143,13 @@ def get_patch_manifest(patch_manifest):
     return patch_manifest
 
 
-def check_files(ttr_dir, patch_manifest, debug=False):
+def check_files(ttr_dir, system, patch_manifest, debug=False):
     """Check the local game files against the files in the patch manifest.
     For any files that don't exist locally, download the full file fresh.
     For files that do exist locally, check if it needs to be updated.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
+    :param system: The system we are running on.
     :param patch_manifest: The patch manifest as a json object.
     :param debug: Set to True to print DEBUG messages.
     :return: True on success, False on failure.
@@ -165,7 +164,7 @@ def check_files(ttr_dir, patch_manifest, debug=False):
         abs_file = os.path.join(ttr_dir, filename)
 
         # Get the download info for the file
-        if not check_patch(abs_file, patch_manifest, download_info):
+        if not check_patch(system, abs_file, patch_manifest, download_info):
             return False
 
     if debug:
@@ -179,10 +178,11 @@ def check_files(ttr_dir, patch_manifest, debug=False):
     return True
 
 
-def check_patch(file, patch_manifest, download_info, debug=False):
+def check_patch(system, file, patch_manifest, download_info, debug=False):
     """Checks if there is a patch for the specified file. If the file cannot
     be found on disk, assume it to be a new download request.
 
+    :param system: The system we are running on.
     :param file: The absolute path of the file to patch check.
     :param patch_manifest: The patch manifest as a json object.
     :param debug: Set to True to print DEBUG messages.
@@ -219,7 +219,6 @@ def check_patch(file, patch_manifest, download_info, debug=False):
 
     download_info_new = {}
     filename = os.path.basename(file)
-    system = get_platform()
 
     try:
         # Using the filename as the index in patch manifest, look for a patch
@@ -325,7 +324,7 @@ def prepare_download(ttr_dir, download_info):
     """Prepares the download by requesting a download mirror endpoint and sets
     up a temporary directory for staging.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
     :param download_info: The download info dictionary.
     :return: True on success, False on failure.
     """
@@ -396,7 +395,7 @@ def get_mirror():
 def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
     """Downloads a file from the mirror.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
     :param temp_dir: The temporary directory to download files to.
     :param file_info: The file info dictionary.
     :param remote_filename: The file to download.
@@ -457,7 +456,7 @@ def process_downloaded_file(ttr_dir, comp_file, decomp_file, file_info):
     """Processes the downloaded file by decompressing the data and saving to
     the TTR installation directory.
 
-    :param ttr_dir: The currently set installation path in login.json.
+    :param ttr_dir: The currently set installation path in launcher.json.
     :param comp_file: The downloaded compressed file as a file object.
     :param decomp_file: The writable file object for saving the decompressed
                         file.

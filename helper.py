@@ -14,17 +14,21 @@ if platform.system() == 'Windows':
     import winreg
 
 
-def load_login_json():
-    """Loads the login.json settings file and creates one if it doesn't
+def load_launcher_json():
+    """Loads the launcher.json settings file and creates one if it doesn't
     exist.
 
-    :return: The settings from login.json using json.load().
+    :return: The settings from launcher.json using json.load().
     """
 
     try:
-        login_json = os.path.join(get_launcher_path(), 'login.json')
-        with open(login_json, encoding='utf-8') as settings_file:
+        if os.path.exists('login.json'):
+            os.rename('login.json', 'launcher.json')
+
+        launcher_json = os.path.join(get_launcher_path(), 'launcher.json')
+        with open(launcher_json, encoding='utf-8') as settings_file:
             settings_data = json.load(settings_file)
+            fix_settings_data(settings_data)
     except FileNotFoundError:
         # Set a default TTR installation directory
         try:
@@ -40,24 +44,25 @@ def load_login_json():
         except OSError:
             ttr_dir = os.path.join(get_launcher_path(), 'Toontown Rewritten')
 
-        # Set default login.json content
+        # Set default launcher.json content
         json_data = {
                         "accounts": {
                         },
                         "launcher": {
                             "ttr-dir": ttr_dir,
-                            "use-stored-accounts": True
+                            "use-stored-accounts": True,
+                            "display-logging": False
                         }
                     }
 
-        # Create login.json
-        update_login_json(json_data)
+        # Create launcher.json
+        update_launcher_json(json_data)
 
         # File was created successfully, reload it
-        settings_data = load_login_json()
+        settings_data = load_launcher_json()
     except json.decoder.JSONDecodeError as ex:
-        print(f'Badly formatted login.json file.\n{ex}')
-        print('\nIf unsure how to fix, delete the login.json file and '
+        print(f'Badly formatted launcher.json file.\n{ex}')
+        print('\nIf unsure how to fix, delete the launcher.json file and '
               'restart the launcher.')
         quit_launcher()
     except OSError as ex:
@@ -67,20 +72,39 @@ def load_login_json():
     return settings_data
 
 
-def update_login_json(settings_data):
-    """Updates the login.json settings file with the settings_data object.
+def update_launcher_json(settings_data):
+    """Updates the launcher.json settings file with the settings_data object.
 
-    :param settings_data: The settings from login.json using json.load().
+    :param settings_data: The settings from launcher.json using json.load().
     """
 
     # Open file and write json
     try:
-        login_json = os.path.join(get_launcher_path(), 'login.json')
-        with open(login_json, 'w', encoding='utf-8') as settings_file:
+        launcher_json = os.path.join(get_launcher_path(), 'launcher.json')
+        with open(launcher_json, 'w', encoding='utf-8') as settings_file:
             json.dump(settings_data, settings_file, indent=4)
     except OSError as ex:
-        print(f'Failed to write login.json.\n{ex}')
+        print(f'Failed to write launcher.json.\n{ex}')
         quit_launcher()
+
+
+def fix_settings_data(settings_data):
+    """Runs known fixes on settings_data.
+    Fixes applied:
+    - Run os.path.expandpath() on ttr-dir if path starts with a ~
+
+    :param settings_data: The settings from launcher.json using json.load().
+    """
+
+    updated = False
+
+    ttr_dir = settings_data['launcher']['ttr-dir']
+    if ttr_dir[0] == '~':
+        updated = True
+        settings_data['launcher']['ttr-dir'] = os.path.expanduser(ttr_dir)
+
+    if updated:
+        update_launcher_json(settings_data)
 
 
 def get_launcher_path():
@@ -168,3 +192,12 @@ def retry(count, interval, callback, **kwargs):
         raise exception
 
     return result
+
+
+def clear():
+    """Clear the console"""
+
+    if sys.platform == 'win32':
+        os.system('cls')
+    else:
+        os.system('clear')

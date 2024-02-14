@@ -6,6 +6,7 @@ functionality.
 
 import os
 import platform
+import stat
 import subprocess
 import sys
 import time
@@ -18,21 +19,21 @@ import patcher
 
 class Launcher:
     """Handles the main launcher functions including:
-    - Adding accounts to login.json
+    - Adding accounts to launcher.json
     - Changing stored passwords
-    - Removing accounts from login.json
+    - Removing accounts from launcher.json
     - Setting TTR installation directory (if one is not automatically detected)
     - Enabling/Disabling password encryption
     - Patches TTR game files
     """
 
     def __init__(self):
-        """Initialize the launcher and load our login.json file
+        """Initialize the launcher and load our launcher.json file
         Also verifies password encryption and checks if it should be
         upgraded
         """
-        # Load login.json
-        self.settings_data = helper.load_login_json()
+        # Load launcher.json
+        self.settings_data = helper.load_launcher_json()
 
         if len(sys.argv) != 3:
             # If password encryption is being used, ask to verify it first
@@ -54,13 +55,13 @@ class Launcher:
                     helper.quit_launcher()
 
     def add_account(self):
-        """Adds a new account to login.json.
+        """Adds a new account to launcher.json.
 
         :return: True if account was added, or False if the user cancels
                  or if the master password is incorrect.
         """
 
-        username = input('Enter username to store or 0 for Main Menu: ')
+        username = input('Enter username to store or 0 to cancel: ')
         if username.isdecimal():
             num = int(username)
             if num == 0:
@@ -88,13 +89,13 @@ class Launcher:
         new_account = {'username': username, 'password': password}
         self.settings_data[
             'accounts'][f'account{num_accounts + 1}'] = new_account
-        helper.update_login_json(self.settings_data)
+        helper.update_launcher_json(self.settings_data)
         print('\nAccount has been added.')
 
         return True
 
     def change_account(self):
-        """ Changes a stored password for an account stored in login.json."""
+        """Changes a stored password for an account stored in launcher.json."""
 
         num_accounts = len(self.settings_data['accounts'])
 
@@ -104,13 +105,13 @@ class Launcher:
 
         print('Which account do you wish to modify?')
         for num in range(num_accounts):
+            account = self.settings_data[
+                "accounts"][f"account{num + 1}"]["username"]
             print(
-                f'{num + 1}. '
-                f'{self.settings_data[
-                    "accounts"][f"account{num + 1}"]["username"]}')
+                f'{num + 1}. {account}')
 
         selection = helper.confirm(
-            'Enter account number or 0 for Main Menu: ', 0, num_accounts)
+            'Enter account number or 0 to cancel: ', 0, num_accounts)
 
         if selection == 0:
             return
@@ -134,12 +135,12 @@ class Launcher:
         # Set new password in json
         self.settings_data[
             'accounts'][f'account{selection}']['password'] = password
-        helper.update_login_json(self.settings_data)
+        helper.update_launcher_json(self.settings_data)
 
         print('\nPassword has been changed.')
 
     def remove_account(self):
-        """Removes an existing account from login.json."""
+        """Removes an existing account from launcher.json."""
 
         num_accounts = len(self.settings_data['accounts'])
         if num_accounts == 0:
@@ -148,13 +149,13 @@ class Launcher:
 
         print('Which account do you wish to delete?')
         for num in range(num_accounts):
+            account = self.settings_data[
+                "accounts"][f"account{num + 1}"]["username"]
             print(
-                f'{num + 1}. '
-                f'{self.settings_data[
-                    "accounts"][f"account{num + 1}"]["username"]}')
+                f'{num + 1}. {account}')
 
         selection = helper.confirm(
-            'Enter account number or 0 for Main Menu: ', 0, num_accounts)
+            'Enter account number or 0 to cancel: ', 0, num_accounts)
         if selection == 0:
             return
 
@@ -167,17 +168,18 @@ class Launcher:
             self.settings_data['accounts'][f'account{num - 1}'] = (
                 self.settings_data['accounts'].pop(f'account{num}'))
 
-        helper.update_login_json(self.settings_data)
+        helper.update_launcher_json(self.settings_data)
         print('\nAccount has been removed.')
 
     def change_ttr_dir(self):
         """Sets or modifies the TTR installation directory."""
 
         ttr_dir = input(
-            'Enter your desired installation path or 0 for Main Menu: ')
+            'Enter your desired installation path or 0 to cancel: ')
         if ttr_dir != '0':
-            self.settings_data['launcher']['ttr-dir'] = ttr_dir
-            helper.update_login_json(self.settings_data)
+            self.settings_data['launcher']['ttr-dir'] = os.path.expanduser(
+                ttr_dir)
+            helper.update_launcher_json(self.settings_data)
             print('\nInstallation path has been set.')
 
     def prepare_login(self):
@@ -202,6 +204,7 @@ class Launcher:
                     return
 
             # Ask user to select account if more than one is stored
+            selection = 1
             if num_accounts > 1:
                 print('Which account do you wish to log in?')
                 for num in range(num_accounts):
@@ -211,12 +214,10 @@ class Launcher:
                     print(f'{num + 1}. {account}')
 
                 selection = helper.confirm(
-                    'Enter account number or 0 for Main Menu: ',
+                    'Enter account number or 0 to cancel: ',
                     0, num_accounts)
                 if selection == 0:
                     return
-            else:
-                selection = 1
 
             # Select correct stored account
             if f'account{selection}' in self.settings_data['accounts']:
@@ -444,22 +445,59 @@ class Launcher:
 
         print('\nLogin successful!')
 
+        display_logging = False
+        if 'display-logging' in self.settings_data['launcher']:
+            display_logging = self.settings_data['launcher']['display-logging']
+
         ttr_dir = self.settings_data['launcher']['ttr-dir']
         ttr_gameserver = resp_data['gameserver']
         ttr_playcookie = resp_data['cookie']
 
-        # Set environment vars
         os.environ['TTR_GAMESERVER'] = ttr_gameserver
         os.environ['TTR_PLAYCOOKIE'] = ttr_playcookie
 
-        if platform.machine().endswith('64'):
-            process = f'{ttr_dir}/ttrengine64'
-        else:
-            process = f'{ttr_dir}/ttrengine'
+        win32_bin = 'TTREngine'
+        win64_bin = 'TTREngine64'
+        linux_bin = 'TTREngine'
+        darwin_bin = 'Toontown Rewritten'
 
-        subprocess.Popen(
-            args=process, creationflags=subprocess.CREATE_NEW_CONSOLE,
-            cwd=ttr_dir)
+        operating_system = platform.system()
+        if operating_system == 'Windows':
+            if platform.machine().endswith('64'):
+                process = os.path.join(ttr_dir, win64_bin)
+            else:
+                process = os.path.join(ttr_dir, win32_bin)
+
+            stdout = subprocess.DEVNULL
+            stderr = subprocess.STDOUT
+            creationflags = subprocess.CREATE_NO_WINDOW
+            if display_logging:
+                stdout = None
+                stderr = None
+                creationflags = subprocess.CREATE_NEW_CONSOLE
+
+            subprocess.Popen(
+                args=process,
+                cwd=ttr_dir,
+                stdout=stdout,
+                stderr=stderr,
+                creationflags=creationflags)
+        elif operating_system in ['Linux', 'Darwin']:
+            binary = linux_bin if operating_system == 'Linux' else darwin_bin
+            process = os.path.join(ttr_dir, binary)
+            mode = (os.stat(process).st_mode
+                    | stat.S_IEXEC
+                    | stat.S_IXUSR
+                    | stat.S_IXGRP
+                    | stat.S_IXOTH)
+            os.chmod(process, mode)
+
+            if display_logging:
+                subprocess.run(args=process, cwd=ttr_dir, check=False)
+            else:
+                subprocess.Popen(
+                    args=process, cwd=ttr_dir, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT, start_new_session=True)
 
     def __soft_fail(self):
         """Called when a recoverable login error is encountered."""

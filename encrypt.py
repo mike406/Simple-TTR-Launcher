@@ -15,7 +15,7 @@ import helper
 def manage_password_encryption(settings_data, upgrade=False):
     """Allows the user to enable or disable password encryption.
 
-    :param settings_data: The settings from login.json using json.load().
+    :param settings_data: The settings from launcher.json using json.load().
     :param upgrade: Suppresses some message output when upgrading hashing.
     """
 
@@ -25,7 +25,7 @@ def manage_password_encryption(settings_data, upgrade=False):
             'WARNING: Your existing passwords will revert to an unencrypted '
             'state! Please make sure you are okay with this.')
         remove_encryption = helper.confirm(
-            'Enter 1 to confirm or 0 for Main Menu: ', 0, 1)
+            'Enter 1 to confirm or 0 to cancel: ', 0, 1)
 
         # Verify master password and decrypt all accounts if correct
         if remove_encryption == 1:
@@ -72,7 +72,7 @@ def manage_password_encryption(settings_data, upgrade=False):
             '\nYour master password has been set and any '
             'existing account passwords are now encrypted.')
 
-    helper.update_login_json(settings_data)
+    helper.update_launcher_json(settings_data)
 
 
 def encrypt(master_password_encoded, salt, data):
@@ -121,7 +121,7 @@ def encrypt_accounts(master_password_encoded, salt, settings_data):
 
     :param master_password_encoded: The master password as a byte string.
     :param salt: The salt as a byte string.
-    :param settings_data: The settings from login.json using json.load().
+    :param settings_data: The settings from launcher.json using json.load().
     :return: The updated settings_data object.
     """
 
@@ -163,7 +163,7 @@ def decrypt_accounts(
 
     :param master_password_encoded: The master password as a byte string.
     :param salt: The salt as a byte string.
-    :param settings_data: The settings from login.json using json.load().
+    :param settings_data: The settings from launcher.json using json.load().
     :param hashing_params: Hashing parameters for Scrypt as a tuple.
     :return: The updated settings_data object.
     """
@@ -217,9 +217,10 @@ def check_hashing_params(
 
     :param master_password_encoded: The master password as a byte string.
     :param salt: The salt as a byte string.
-    :param settings_data: The settings from login.json using json.load().
-    :param check_mismatch: For checking if there is a mismatch in login.json's
-                           hashing parameters compared to what is expected.
+    :param settings_data: The settings from launcher.json using json.load().
+    :param check_mismatch: For checking if there is a mismatch in
+                           launcher.json's hashing parameters compared
+                           to what is expected.
     :return: A tuple containing Scrypt parameters N, r, p.
     """
     if 'hashing-params' in settings_data['launcher']:
@@ -230,8 +231,8 @@ def check_hashing_params(
             scrypt_p_cur = settings_data['launcher']['hashing-params']['p']
         except KeyError:
             print(
-                'Invalid hashing settings in login.json. '
-                'You will need to delete the login.json file '
+                'Invalid hashing settings in launcher.json. '
+                'You will need to delete the launcher.json file '
                 'and start over.\n')
             helper.quit_launcher()
     else:
@@ -294,7 +295,7 @@ def get_salt(settings_data):
     """
     Retrieves the stored salt used for the encryption.
 
-    :param settings_data: The settings from login.json using json.load().
+    :param settings_data: The settings from launcher.json using json.load().
     :return: The stored salt in settings_data.
     """
 
@@ -307,7 +308,7 @@ def verify_master_password(
     confirm their password and does this by attempting to decrypt the test
     value in settings_data['launcher']['password-verification'].
 
-    :param settings_data: The settings from login.json using json.load().
+    :param settings_data: The settings from launcher.json using json.load().
     :param msg: The message to print when too many passwords were entered.
     :return: The master password encoded as a UTF-8 byte string on success
              or False if the user enters the password incorrect 3 times.
