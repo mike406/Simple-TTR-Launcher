@@ -174,6 +174,10 @@ class Launcher:
     def change_ttr_dir(self):
         """Sets or modifies the TTR installation directory."""
 
+        if 'ttr-dir' in self.settings_data['launcher']:
+            cur = self.settings_data['launcher']['ttr-dir']
+            print(f'Current installation path: {cur}')
+
         ttr_dir = input(
             'Enter your desired installation path or 0 to cancel: ')
         if ttr_dir != '0':
