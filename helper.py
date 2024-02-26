@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """This module contains some common helper functions that the other
 modules share.
 """

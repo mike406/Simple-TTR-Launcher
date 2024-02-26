@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Handles downloading, patching and installation of the game files."""
 
 import bz2

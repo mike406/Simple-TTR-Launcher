@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Contains the Launcher class which handles all main launcher
 functionality.
 """

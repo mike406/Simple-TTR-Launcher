@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Handles password encryption for the launcher.
 It uses a user-created master password to encrypt their stored account info.
 """
