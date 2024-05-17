@@ -329,11 +329,11 @@ def prepare_download(ttr_dir, download_info):
 
     # Choose a download mirror
     try:
-        mirror = helper.retry(
-            3, 5, get_mirror)
+        mirrors = helper.retry(
+            3, 5, get_mirrors)
     except requests.exceptions.RequestException:
         print(
-            '\nCould not get a download mirror. '
+            '\nCould not get the download mirrors. '
             'Please check your internet connection '
             'as well as https://toon.town/status')
         return False
@@ -364,7 +364,7 @@ def prepare_download(ttr_dir, download_info):
                 result = helper.retry(
                     3, 5, download_file, ttr_dir=ttr_dir,
                     temp_dir=temp_dir, file_info=download_info[filename],
-                    remote_filename=filename, mirror=mirror)
+                    remote_filename=filename, mirrors=mirrors)
 
                 # Download failed too many times
                 if not result:
@@ -376,41 +376,42 @@ def prepare_download(ttr_dir, download_info):
     return True
 
 
-def get_mirror():
-    """Chooses a download mirror endpoint.
+def get_mirrors():
+    """Gets available download mirrors.
 
-    :return: The mirror URL.
+    :return: The mirror URLs.
     """
 
     mirror_url = 'https://www.toontownrewritten.com/api/mirrors'
     mirrors = requests.get(url=mirror_url, timeout=30)
     mirrors.raise_for_status()
-    mirror = random.choice(mirrors.json())
+    mirrors = mirrors.json()
+    random.shuffle(mirrors)
 
-    return mirror
+    return mirrors
 
 
-def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
-    """Downloads a file from the mirror.
+def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirrors):
+    """Downloads a file from a mirror.
 
     :param ttr_dir: The currently set installation path in launcher.json.
     :param temp_dir: The temporary directory to download files to.
     :param file_info: The file info dictionary.
     :param remote_filename: The file to download.
-    :param mirror: The download mirror.
+    :param mirrors: The list of download mirrors.
     :return: True on success, False on failure.
     """
 
+    mirror = mirrors[0]
     local_filename = file_info['local_filename']
     chunk_size = 65536
 
     # Attempt to download the file
     try:
         with requests.get(
-                    url=urljoin(mirror, remote_filename),
-                    timeout=1,
-                    stream=True
-                ) as request:
+                url=urljoin(mirror, remote_filename),
+                timeout=1,
+                stream=True) as request:
             request.raise_for_status()
 
             # Open temporary file for writing
@@ -418,13 +419,12 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
             with open(temp_file_path, 'w+b') as comp_file:
                 # Display progress of writing the file with tqdm
                 with tqdm.wrapattr(
-                            comp_file,
-                            'write',
-                            total=int(request.headers.get('Content-Length')),
-                            desc=f'Downloading {local_filename}',
-                            leave=False,
-                            ascii=" █"
-                        ) as fobj:
+                        comp_file,
+                        'write',
+                        total=int(request.headers.get('Content-Length')),
+                        desc=f'Downloading {local_filename}',
+                        leave=False,
+                        ascii=" █") as fobj:
 
                     # Write to the file in chunks
                     for chunk in request.iter_content(chunk_size=chunk_size):
@@ -432,8 +432,8 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
 
                 # Open file to write decompressed data to
                 with open(
-                            os.path.join(temp_dir, local_filename), 'w+b'
-                        ) as decomp_file:
+                        os.path.join(
+                            temp_dir, local_filename), 'w+b') as decomp_file:
                     # Process the downloaded file and write its content
                     process_downloaded_file(
                         ttr_dir, comp_file, decomp_file, file_info)
@@ -444,6 +444,9 @@ def download_file(ttr_dir, temp_dir, file_info, remote_filename, mirror):
         return False
     except (FileNotFoundError, requests.exceptions.RequestException):
         print(f'\nFailed to download {local_filename}.')
+
+        if len(mirrors) > 1:
+            mirrors.remove(mirror)
 
         return False
 
