@@ -20,7 +20,7 @@ class Launcher:
     - Adding accounts to launcher.json
     - Changing stored passwords
     - Removing accounts from launcher.json
-    - Setting TTR installation directory (if one is not automatically detected)
+    - Setting TTR installation directory
     - Enabling/Disabling password encryption
     - Patches TTR game files
     """
@@ -188,10 +188,9 @@ class Launcher:
         """Start of the login process. This function can handle a couple of
         scenarios:
 
-        - Asks user which stored account they would like to
-        use - Optionally can allow user to not use the account storage
-        feature - Optionally supports passing credentials as command
-        line arguments
+        - Asks user which stored account they would like to use
+        - Optionally can allow user to not use the account storage feature
+        - Optionally supports passing credentials as command line arguments
         """
 
         # Check if use-stored-accounts is set
@@ -256,6 +255,20 @@ class Launcher:
         """Allows the user to enable or disable password encryption."""
 
         encrypt.manage_password_encryption(self.settings_data)
+
+    def toggle_account_storage(self):
+        """Enable or disable the account storage feature."""
+
+        self.settings_data['launcher']['use-stored-accounts'] = (
+            not self.settings_data['launcher']['use-stored-accounts'])
+        helper.update_launcher_json(self.settings_data)
+
+    def toggle_game_log_display(self):
+        """Enable or disable logging game to console."""
+
+        self.settings_data['launcher']['display-logging'] = (
+            not self.settings_data['launcher']['display-logging'])
+        helper.update_launcher_json(self.settings_data)
 
     def __check_update(self, patch_manifest):
         """

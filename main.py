@@ -145,13 +145,9 @@ def choose_options_menu_item(launcher, num_menu_items):
         print()
         clear = False
     elif selection == 3:
-        launcher.settings_data['launcher']['use-stored-accounts'] = (
-            not launcher.settings_data['launcher']['use-stored-accounts'])
-        helper.update_launcher_json(launcher.settings_data)
+        launcher.toggle_account_storage()
     elif selection == 4:
-        launcher.settings_data['launcher']['display-logging'] = (
-            not launcher.settings_data['launcher']['display-logging'])
-        helper.update_launcher_json(launcher.settings_data)
+        launcher.toggle_game_log_display()
 
     if selection != 0:
         show_options_menu(launcher, clear)
