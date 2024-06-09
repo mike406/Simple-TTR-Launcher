@@ -32,6 +32,7 @@ class Launcher:
         """
         # Load launcher.json
         self.settings_data = helper.load_launcher_json()
+        self.encrypt = encrypt.Encrypt(self.settings_data)
 
         if len(sys.argv) != 3:
             # If password encryption is being used, ask to verify it first
@@ -39,236 +40,17 @@ class Launcher:
                 self.settings_data[
                     'launcher']['use-password-encryption'] = False
             if self.settings_data['launcher']['use-password-encryption']:
-                master_password = encrypt.verify_master_password(
+                master_password = self.encrypt.verify_master_password(
                     self.settings_data)
 
                 if master_password:
                     # If master password is verified, check for new
                     # hashing params
-                    encrypt.check_hashing_params(
-                        master_password, encrypt.get_salt(self.settings_data),
-                        self.settings_data)
+                    self.encrypt.check_hashing_params(
+                        master_password, self.settings_data)
                 else:
                     # Wrong password entered too many times
                     helper.quit_launcher()
-
-    def add_account(self):
-        """Adds a new account to launcher.json.
-
-        :return: True if account was added, or False if the user cancels
-                 or if the master password is incorrect.
-        """
-
-        username = input('Enter username to store or 0 to cancel: ')
-        if username.isdecimal():
-            num = int(username)
-            if num == 0:
-                return False
-
-        password = pwinput.pwinput('Enter password to store: ')
-
-        # If password encryption is being used, encrypt the new password
-        if self.settings_data['launcher']['use-password-encryption']:
-            msg = ('\nYou have made too many password attempts. '
-                   'No changes have been made.')
-            master_password = encrypt.verify_master_password(
-                self.settings_data, msg)
-
-            if not master_password:
-                return False
-
-            salt = encrypt.get_salt(self.settings_data)
-            password = encrypt.encrypt(
-                master_password, salt, password).decode('utf-8')
-
-        num_accounts = len(self.settings_data['accounts'])
-
-        # Add new account to json
-        new_account = {'username': username, 'password': password}
-        self.settings_data[
-            'accounts'][f'account{num_accounts + 1}'] = new_account
-        helper.update_launcher_json(self.settings_data)
-        print('\nAccount has been added.')
-
-        return True
-
-    def change_account(self):
-        """Changes a stored password for an account stored in launcher.json."""
-
-        num_accounts = len(self.settings_data['accounts'])
-
-        if num_accounts == 0:
-            print('No accounts to change. Please add one first.')
-            return
-
-        print('Which account do you wish to modify?')
-        for num in range(num_accounts):
-            account = self.settings_data[
-                "accounts"][f"account{num + 1}"]["username"]
-            print(
-                f'{num + 1}. {account}')
-
-        selection = helper.confirm(
-            'Enter account number or 0 to cancel: ', 0, num_accounts)
-
-        if selection == 0:
-            return
-
-        password = pwinput.pwinput('Enter new password: ')
-
-        # If password encryption is being used, encrypt the new password
-        if self.settings_data['launcher']['use-password-encryption']:
-            msg = ('\nYou have made too many password attempts. '
-                   'No changes have been made.')
-            master_password = encrypt.verify_master_password(
-                self.settings_data, msg)
-
-            if not master_password:
-                return
-
-            salt = encrypt.get_salt(self.settings_data)
-            password = encrypt.encrypt(
-                master_password, salt, password).decode('utf-8')
-
-        # Set new password in json
-        self.settings_data[
-            'accounts'][f'account{selection}']['password'] = password
-        helper.update_launcher_json(self.settings_data)
-
-        print('\nPassword has been changed.')
-
-    def remove_account(self):
-        """Removes an existing account from launcher.json."""
-
-        num_accounts = len(self.settings_data['accounts'])
-        if num_accounts == 0:
-            print('No accounts to remove.')
-            return
-
-        print('Which account do you wish to delete?')
-        for num in range(num_accounts):
-            account = self.settings_data[
-                "accounts"][f"account{num + 1}"]["username"]
-            print(
-                f'{num + 1}. {account}')
-
-        selection = helper.confirm(
-            'Enter account number or 0 to cancel: ', 0, num_accounts)
-        if selection == 0:
-            return
-
-        # Remove account from json
-        del self.settings_data['accounts'][f'account{selection}']
-
-        # Adjust account numbering
-        selection += 1
-        for num in range(selection, num_accounts + 1):
-            self.settings_data['accounts'][f'account{num - 1}'] = (
-                self.settings_data['accounts'].pop(f'account{num}'))
-
-        helper.update_launcher_json(self.settings_data)
-        print('\nAccount has been removed.')
-
-    def change_ttr_dir(self):
-        """Sets or modifies the TTR installation directory."""
-
-        if 'ttr-dir' in self.settings_data['launcher']:
-            cur = self.settings_data['launcher']['ttr-dir']
-            print(f'Current installation path: {cur}')
-
-        ttr_dir = input(
-            'Enter your desired installation path or 0 to cancel: ')
-        if ttr_dir != '0':
-            self.settings_data['launcher']['ttr-dir'] = os.path.expanduser(
-                ttr_dir)
-            helper.update_launcher_json(self.settings_data)
-            print('\nInstallation path has been set.')
-
-    def prepare_login(self):
-        """Start of the login process. This function can handle a couple of
-        scenarios:
-
-        - Asks user which stored account they would like to use
-        - Optionally can allow user to not use the account storage feature
-        - Optionally supports passing credentials as command line arguments
-        """
-
-        # Check if use-stored-accounts is set
-        use_stored_accounts = self.settings_data[
-            'launcher']['use-stored-accounts']
-        if use_stored_accounts and len(sys.argv) != 3:
-            num_accounts = len(self.settings_data['accounts'])
-            if num_accounts == 0:
-                # Ask user to add an account if none exist yet
-                account = self.add_account()
-                if not account:
-                    return
-
-            # Ask user to select account if more than one is stored
-            selection = 1
-            if num_accounts > 1:
-                print('Which account do you wish to log in?')
-                for num in range(num_accounts):
-                    account = (
-                        self.settings_data[
-                            "accounts"][f"account{num + 1}"]["username"])
-                    print(f'{num + 1}. {account}')
-
-                selection = helper.confirm(
-                    'Enter account number or 0 to cancel: ',
-                    0, num_accounts)
-                if selection == 0:
-                    return
-
-            # Select correct stored account
-            if f'account{selection}' in self.settings_data['accounts']:
-                username = (
-                    self.settings_data[
-                        'accounts'][f'account{selection}']['username'])
-                password = (
-                    self.settings_data[
-                        'accounts'][f'account{selection}']['password'])
-
-                # If password encryption is being used, decrypt the password
-                if self.settings_data['launcher']['use-password-encryption']:
-                    master_password = encrypt.verify_master_password(
-                        self.settings_data)
-                    if not master_password:
-                        return
-
-                    salt = encrypt.get_salt(self.settings_data)
-                    password = encrypt.decrypt(
-                        master_password, salt, password).decode('utf-8')
-
-        # Alternative login methods
-        if len(sys.argv) == 3:
-            print('Logging in with CLI arguments...')
-            username = sys.argv[1]
-            password = sys.argv[2]
-        elif not use_stored_accounts:
-            username = input('Enter username: ')
-            password = pwinput.pwinput('Enter password: ')
-
-        self.__login_worker(username, password)
-
-    def manage_password_encryption(self):
-        """Allows the user to enable or disable password encryption."""
-
-        encrypt.manage_password_encryption(self.settings_data)
-
-    def toggle_account_storage(self):
-        """Enable or disable the account storage feature."""
-
-        self.settings_data['launcher']['use-stored-accounts'] = (
-            not self.settings_data['launcher']['use-stored-accounts'])
-        helper.update_launcher_json(self.settings_data)
-
-    def toggle_game_log_display(self):
-        """Enable or disable logging game to console."""
-
-        self.settings_data['launcher']['display-logging'] = (
-            not self.settings_data['launcher']['display-logging'])
-        helper.update_launcher_json(self.settings_data)
 
     def __check_update(self, patch_manifest):
         """
@@ -518,3 +300,218 @@ class Launcher:
         """Called when a recoverable login error is encountered."""
 
         print('Login failed!')
+
+    def add_account(self):
+        """Adds a new account to launcher.json.
+
+        :return: True if account was added, or False if the user cancels
+                 or if the master password is incorrect.
+        """
+
+        username = input('Enter username to store or 0 to cancel: ')
+        if username.isdecimal():
+            num = int(username)
+            if num == 0:
+                return False
+
+        password = pwinput.pwinput('Enter password to store: ')
+
+        # If password encryption is being used, encrypt the new password
+        if self.settings_data['launcher']['use-password-encryption']:
+            msg = ('\nYou have made too many password attempts. '
+                   'No changes have been made.')
+            master_password = self.encrypt.verify_master_password(
+                self.settings_data, msg)
+
+            if not master_password:
+                return False
+
+            password = self.encrypt.encrypt(
+                master_password, password).decode('utf-8')
+
+        num_accounts = len(self.settings_data['accounts'])
+
+        # Add new account to json
+        new_account = {'username': username, 'password': password}
+        self.settings_data[
+            'accounts'][f'account{num_accounts + 1}'] = new_account
+        helper.update_launcher_json(self.settings_data)
+        print('\nAccount has been added.')
+
+        return True
+
+    def change_account(self):
+        """Changes a stored password for an account stored in launcher.json."""
+
+        num_accounts = len(self.settings_data['accounts'])
+
+        if num_accounts == 0:
+            print('No accounts to change. Please add one first.')
+            return
+
+        print('Which account do you wish to modify?')
+        for num in range(num_accounts):
+            account = self.settings_data[
+                "accounts"][f"account{num + 1}"]["username"]
+            print(
+                f'{num + 1}. {account}')
+
+        selection = helper.confirm(
+            'Enter account number or 0 to cancel: ', 0, num_accounts)
+
+        if selection == 0:
+            return
+
+        password = pwinput.pwinput('Enter new password: ')
+
+        # If password encryption is being used, encrypt the new password
+        if self.settings_data['launcher']['use-password-encryption']:
+            msg = ('\nYou have made too many password attempts. '
+                   'No changes have been made.')
+            master_password = self.encrypt.verify_master_password(
+                self.settings_data, msg)
+
+            if not master_password:
+                return
+
+            password = self.encrypt.encrypt(
+                master_password, password).decode('utf-8')
+
+        # Set new password in json
+        self.settings_data[
+            'accounts'][f'account{selection}']['password'] = password
+        helper.update_launcher_json(self.settings_data)
+
+        print('\nPassword has been changed.')
+
+    def remove_account(self):
+        """Removes an existing account from launcher.json."""
+
+        num_accounts = len(self.settings_data['accounts'])
+        if num_accounts == 0:
+            print('No accounts to remove.')
+            return
+
+        print('Which account do you wish to delete?')
+        for num in range(num_accounts):
+            account = self.settings_data[
+                "accounts"][f"account{num + 1}"]["username"]
+            print(
+                f'{num + 1}. {account}')
+
+        selection = helper.confirm(
+            'Enter account number or 0 to cancel: ', 0, num_accounts)
+        if selection == 0:
+            return
+
+        # Remove account from json
+        del self.settings_data['accounts'][f'account{selection}']
+
+        # Adjust account numbering
+        selection += 1
+        for num in range(selection, num_accounts + 1):
+            self.settings_data['accounts'][f'account{num - 1}'] = (
+                self.settings_data['accounts'].pop(f'account{num}'))
+
+        helper.update_launcher_json(self.settings_data)
+        print('\nAccount has been removed.')
+
+    def change_ttr_dir(self):
+        """Sets or modifies the TTR installation directory."""
+
+        if 'ttr-dir' in self.settings_data['launcher']:
+            cur = self.settings_data['launcher']['ttr-dir']
+            print(f'Current installation path: {cur}')
+
+        ttr_dir = input(
+            'Enter your desired installation path or 0 to cancel: ')
+        if ttr_dir != '0':
+            self.settings_data['launcher']['ttr-dir'] = os.path.expanduser(
+                ttr_dir)
+            helper.update_launcher_json(self.settings_data)
+            print('\nInstallation path has been set.')
+
+    def prepare_login(self):
+        """Start of the login process. This function can handle a couple of
+        scenarios:
+
+        - Asks user which stored account they would like to use
+        - Optionally can allow user to not use the account storage feature
+        - Optionally supports passing credentials as command line arguments
+        """
+
+        # Check if use-stored-accounts is set
+        use_stored_accounts = self.settings_data[
+            'launcher']['use-stored-accounts']
+        if use_stored_accounts and len(sys.argv) != 3:
+            num_accounts = len(self.settings_data['accounts'])
+            if num_accounts == 0:
+                # Ask user to add an account if none exist yet
+                account = self.add_account()
+                if not account:
+                    return
+
+            # Ask user to select account if more than one is stored
+            selection = 1
+            if num_accounts > 1:
+                print('Which account do you wish to log in?')
+                for num in range(num_accounts):
+                    account = (
+                        self.settings_data[
+                            "accounts"][f"account{num + 1}"]["username"])
+                    print(f'{num + 1}. {account}')
+
+                selection = helper.confirm(
+                    'Enter account number or 0 to cancel: ',
+                    0, num_accounts)
+                if selection == 0:
+                    return
+
+            # Select correct stored account
+            if f'account{selection}' in self.settings_data['accounts']:
+                username = (
+                    self.settings_data[
+                        'accounts'][f'account{selection}']['username'])
+                password = (
+                    self.settings_data[
+                        'accounts'][f'account{selection}']['password'])
+
+                # If password encryption is being used, decrypt the password
+                if self.settings_data['launcher']['use-password-encryption']:
+                    master_password = self.encrypt.verify_master_password(
+                        self.settings_data)
+                    if not master_password:
+                        return
+
+                    password = self.encrypt.decrypt(
+                        master_password, password).decode('utf-8')
+
+        # Alternative login methods
+        if len(sys.argv) == 3:
+            print('Logging in with CLI arguments...')
+            username = sys.argv[1]
+            password = sys.argv[2]
+        elif not use_stored_accounts:
+            username = input('Enter username: ')
+            password = pwinput.pwinput('Enter password: ')
+
+        self.__login_worker(username, password)
+
+    def manage_password_encryption(self):
+        """Allows the user to enable or disable password encryption."""
+
+        self.encrypt.manage_password_encryption(self.settings_data)
+
+    def toggle_account_storage(self):
+        """Enable or disable the account storage feature."""
+
+        self.settings_data['launcher']['use-stored-accounts'] = (
+            not self.settings_data['launcher']['use-stored-accounts'])
+        helper.update_launcher_json(self.settings_data)
+
+    def toggle_game_log_display(self):
+        """Enable or disable logging game to console."""
+
+        self.settings_data['launcher']['display-logging'] = (
+            not self.settings_data['launcher']['display-logging'])
+        helper.update_launcher_json(self.settings_data)
