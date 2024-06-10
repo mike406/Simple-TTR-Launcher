@@ -59,7 +59,7 @@ class Launcher:
         :param patch_manifest: The patch manifest URL path.
         """
 
-        return patcher.check_update(
+        return patcher.Patcher().check_update(
             self.settings_data['launcher']['ttr-dir'], patch_manifest)
 
     def __login_worker(self, username, password):
