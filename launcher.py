@@ -30,25 +30,24 @@ class Launcher:
         Also verifies password encryption and checks if it should be
         upgraded
         """
+
         # Load launcher.json
         self.settings_data = helper.load_launcher_json()
         self.encrypt = encrypt.Encrypt(self.settings_data)
 
         if len(sys.argv) != 3:
-            # If password encryption is being used, ask to verify it first
+            # If password encryption has never been used, ask user to enable it
             if 'use-password-encryption' not in self.settings_data['launcher']:
-                self.settings_data[
-                    'launcher']['use-password-encryption'] = False
-            if self.settings_data['launcher']['use-password-encryption']:
-                master_password = self.encrypt.verify_master_password(
-                    self.settings_data)
+                self.encrypt.manage_password_encryption(self.settings_data)
+                print()
 
-                if master_password:
-                    # If master password is verified, check for new
-                    # hashing params
-                    self.encrypt.check_hashing_params(
-                        master_password, self.settings_data)
-                else:
+            # Notify user if they have manually disabled password encryption
+            if not self.settings_data['launcher']['use-password-encryption']:
+                print("WARNING: Password encryption is not enabled!\n")
+
+            if self.settings_data['launcher']['use-password-encryption']:
+                # Check for new hashing params
+                if not self.encrypt.check_hashing_params(self.settings_data):
                     # Wrong password entered too many times
                     helper.quit_launcher()
 
