@@ -102,7 +102,7 @@ class Patcher:
                     patch_manifest=patch_manifest)
             except requests.exceptions.RequestException:
                 print(
-                    '\nCould not download the patch manifest '
+                    '\nCould not download the patch manifest. '
                     'Please check your internet connection '
                     'as well as https://toon.town/status')
 
@@ -151,6 +151,9 @@ class Patcher:
         :param patch_manifest: The patch manifest URL path.
         :return: The patch manifest as a json object
         """
+
+        if patch_manifest.endswith('patchmanifest'):
+            patch_manifest += '.txt'
 
         remote_file = f'https://cdn.toontownrewritten.com{patch_manifest}'
         request = requests.get(url=remote_file, timeout=self.request_timeout)
