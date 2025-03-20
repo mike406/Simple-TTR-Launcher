@@ -360,12 +360,8 @@ class Patcher:
                 # Start processing each download
                 bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt}'
                 for filename in tqdm(
-                            download_info,
-                            desc='Update Progress',
-                            bar_format=bar_format,
-                            ascii=" █"
-                        ):
-
+                            download_info, desc='Update Progress',
+                            bar_format=bar_format, ascii=" █"):
                     # Download the file
                     result = helper.retry(
                         3, 5, self.__download_file, ttr_dir=ttr_dir,
@@ -410,13 +406,10 @@ class Patcher:
                 with open(temp_file_path, 'w+b') as comp_file:
                     # Display progress of writing the file with tqdm
                     with tqdm.wrapattr(
-                            comp_file,
-                            'write',
+                            comp_file, 'write',
                             total=int(request.headers.get('Content-Length')),
-                            desc=f'Downloading {local_filename}',
-                            leave=False,
+                            desc=f'Downloading {local_filename}', leave=False,
                             ascii=" █") as fobj:
-
                         # Write to the file in chunks
                         for chunk in request.iter_content(
                                 chunk_size=chunk_size):
