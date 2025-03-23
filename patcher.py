@@ -1,6 +1,7 @@
 """Handles downloading, patching and installation of the game files."""
 
 import bz2
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -26,6 +27,8 @@ class Patcher:
         if debug:
             self.debug = True
 
+        self.cpus = os.cpu_count()
+        self.session = requests.Session()
         self.request_timeout = 30
         self.mirrors = None
         try:
@@ -49,7 +52,8 @@ class Patcher:
         """
 
         mirror_url = 'https://www.toontownrewritten.com/api/mirrors'
-        mirrors = requests.get(url=mirror_url, timeout=self.request_timeout)
+        mirrors = self.session.get(
+            url=mirror_url, timeout=self.request_timeout)
         mirrors.raise_for_status()
         mirrors = mirrors.json()
         random.shuffle(mirrors)
@@ -156,7 +160,8 @@ class Patcher:
             patch_manifest += '.txt'
 
         remote_file = f'https://cdn.toontownrewritten.com{patch_manifest}'
-        request = requests.get(url=remote_file, timeout=self.request_timeout)
+        request = self.session.get(
+            url=remote_file, timeout=self.request_timeout)
         request.raise_for_status()
         patch_manifest = request.json()
 
@@ -191,7 +196,7 @@ class Patcher:
 
         if download_info:
             # New downloads were found
-            return self.__prepare_download(ttr_dir, download_info)
+            return self.__download_worker(ttr_dir, download_info)
 
         # No new downloads were found
         return True
@@ -337,9 +342,10 @@ class Patcher:
 
         return sha1.hexdigest()
 
-    def __prepare_download(self, ttr_dir, download_info):
+    def __download_worker(self, ttr_dir, download_info):
         """Prepares the download by requesting a download mirror endpoint and
-        sets up a temporary directory for staging.
+        sets up a temporary directory for staging. Downloads are then
+        decompressed and processed.
 
         :param ttr_dir: The currently set installation path in launcher.json.
         :param download_info: The download info dictionary.
@@ -352,24 +358,77 @@ class Patcher:
 
         try:
             # Create a temporary directory to stage the downloads
-            with tempfile.TemporaryDirectory() as temp:
+            with tempfile.TemporaryDirectory(dir=ttr_dir) as temp:
                 # Locate where the temporary directory is
-                temp_root = tempfile.gettempdir()
-                temp_dir = os.path.join(temp_root, temp)
+                temp_dir = os.path.join(tempfile.gettempdir(), temp)
 
-                # Start processing each download
-                bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt}'
-                for filename in tqdm(
-                            download_info, desc='Update Progress',
-                            bar_format=bar_format, ascii=" █"):
-                    # Download the file
-                    result = helper.retry(
-                        3, 5, self.__download_file, ttr_dir=ttr_dir,
-                        temp_dir=temp_dir, file_info=download_info[filename],
-                        remote_filename=filename, mirrors=self.mirrors)
+                # Build list of params for downloads, decompression
+                # and processing. Each list item is a tuple of parameters
+                # that are used with executor.submit() for multithreading
+                download_file_params = []
+                decompress_bz2_params = []
+                process_decompressed_file_params = []
+                for filename in download_info:
+                    # Files to download
+                    download_file_params.append(
+                        (temp_dir, download_info[filename],
+                            filename, self.mirrors))
 
-                    # Download failed too many times
-                    if not result:
+                    # Files to decompress
+                    comp_file_path = os.path.join(temp_dir, filename)
+                    decomp_file_path = os.path.join(
+                        temp_dir, download_info[filename]['local_filename'])
+                    decomp_hash = download_info[filename]['hash']
+                    decompress_bz2_params.append(
+                        (comp_file_path, decomp_file_path, decomp_hash))
+
+                    # Decompressed files to process
+                    process_decompressed_file_params.append(
+                        (ttr_dir, temp_dir, download_info[filename]))
+
+                # Download files
+                with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=self.cpus) as executor:
+                    futures = [executor.submit(
+                        self.__download_file, i[0], i[1], i[2], i[3]
+                        ) for i in download_file_params]
+
+                # Check for any failed downloads
+                for future in concurrent.futures.as_completed(futures):
+                    if not future.result():
+                        print(
+                            '\nOne or more downloads failed. '
+                            'Please try again in a few minutes.')
+                        return False
+
+                # Decompress files
+                with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=self.cpus) as executor:
+                    futures = [executor.submit(
+                        self.__decompress_bz2, i[0], i[1], i[2]
+                        ) for i in decompress_bz2_params]
+
+                # Check for any failed file decompressions
+                for future in concurrent.futures.as_completed(futures):
+                    if not future.result():
+                        print(
+                            '\nOne or more files failed to decompress. '
+                            'Please try again in a few minutes.')
+                        return False
+
+                # Process downloaded files
+                with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=self.cpus) as executor:
+                    futures = [executor.submit(
+                        self.__process_decompressed_file, i[0], i[1], i[2]
+                        ) for i in process_decompressed_file_params]
+
+                # Check for any failed patches
+                for future in concurrent.futures.as_completed(futures):
+                    if not future.result():
+                        print(
+                            '\nOne or more patches failed to apply. '
+                            'Please try again in a few minutes.')
                         return False
         except FileNotFoundError:
             print('\nFailed to create temporary directory.')
@@ -377,11 +436,9 @@ class Patcher:
 
         return True
 
-    def __download_file(
-            self, ttr_dir, temp_dir, file_info, remote_filename, mirrors):
+    def __download_file(self, temp_dir, file_info, remote_filename, mirrors):
         """Downloads a file from a mirror.
 
-        :param ttr_dir: The currently set installation path in launcher.json.
         :param temp_dir: The temporary directory to download files to.
         :param file_info: The file info dictionary.
         :param remote_filename: The file to download.
@@ -391,43 +448,40 @@ class Patcher:
 
         mirror = mirrors[0]
         local_filename = file_info['local_filename']
+        comp_hash = file_info['comp_hash']
         chunk_size = 65536
 
         # Attempt to download the file
         try:
-            with requests.get(
-                    url=urljoin(mirror, remote_filename),
-                    timeout=self.request_timeout,
-                    stream=True) as request:
-                request.raise_for_status()
+            request = helper.retry(
+                3, 5, self.session.get, False,
+                url=urljoin(mirror, remote_filename),
+                timeout=self.request_timeout, stream=True)
 
-                # Open temporary file for writing
-                temp_file_path = os.path.join(temp_dir, remote_filename)
-                with open(temp_file_path, 'w+b') as comp_file:
-                    # Display progress of writing the file with tqdm
-                    with tqdm.wrapattr(
-                            comp_file, 'write',
-                            total=int(request.headers.get('Content-Length')),
-                            desc=f'Downloading {local_filename}', leave=False,
-                            ascii=" █") as fobj:
-                        # Write to the file in chunks
-                        for chunk in request.iter_content(
-                                chunk_size=chunk_size):
-                            fobj.write(chunk)
+            request.raise_for_status()
 
-                    # Open file to write decompressed data to
-                    with open(
-                            os.path.join(
-                                temp_dir,
-                                local_filename), 'w+b') as decomp_file:
-                        # Process the downloaded file and write its content
-                        self.__process_downloaded_file(
-                            ttr_dir, comp_file, decomp_file, file_info)
-        except RuntimeError:
-            print(
-                f'\nDownloaded file {local_filename} checksum did not match.')
+            # Open temporary file for writing
+            temp_file_path = os.path.join(temp_dir, remote_filename)
+            with open(temp_file_path, 'w+b') as comp_file:
+                # Display progress of writing the file with tqdm
+                with tqdm.wrapattr(
+                        comp_file, 'write',
+                        total=int(request.headers.get('Content-Length')),
+                        unit='B', unit_scale=True,
+                        desc=f'Downloading {local_filename}', leave=False,
+                        ascii=" █") as fobj:
+                    # Write to the file in chunks
+                    for chunk in request.iter_content(
+                            chunk_size=chunk_size):
+                        fobj.write(chunk)
 
-            return False
+            # Verify downloaded file hash
+            with open(temp_file_path, 'rb') as comp_file:
+                local_comp_hash = self.__get_sha1sum(comp_file)
+                if local_comp_hash != comp_hash:
+                    # Hash mismatch, mark this download as failed
+                    print(f'\nFailed to download {local_filename}.')
+                    return False
         except (FileNotFoundError, requests.exceptions.RequestException):
             print(f'\nFailed to download {local_filename}.')
 
@@ -438,77 +492,75 @@ class Patcher:
 
         return True
 
-    def __process_downloaded_file(
-            self, ttr_dir, comp_file, decomp_file, file_info):
-        """Processes the downloaded file by decompressing the data and saving
-        to the TTR installation directory.
-
-        :param ttr_dir: The currently set installation path in launcher.json.
-        :param comp_file: The downloaded compressed file as a file object.
-        :param decomp_file: The writable file object for saving the
-                            decompressed file.
-        :param file_info: The file info dictionary.
-        """
-
-        dl_type = file_info['type']
-        local_filename = file_info['local_filename']
-        decomp_hash = file_info['hash']
-        comp_hash = file_info['comp_hash']
-
-        # Verify comp_hash
-        local_comp_hash = self.__get_sha1sum(comp_file)
-        if local_comp_hash == comp_hash:
-            # Hash is good, we can decompress the archive
-            self.__decompress_bz2(comp_file, decomp_file)
-
-            # Verify decomp_hash
-            local_hash = self.__get_sha1sum(decomp_file)
-            if local_hash == decomp_hash:
-                # Hash is good, we can move the final file
-                # If type is full just move the file, else apply as patch
-                final_file_path = os.path.join(ttr_dir, local_filename)
-                if dl_type == 'full':
-                    # Write decomp_file to install directory
-                    with open(final_file_path, 'w+b') as final_file:
-                        decomp_file.seek(0)
-                        final_file.seek(0)
-                        shutil.copyfileobj(decomp_file, final_file)
-                elif dl_type == 'patch':
-                    # Apply the bsdiff4 patch inplace
-                    post_patch_hash = file_info['post_patch_hash']
-                    bsdiff4.file_patch_inplace(
-                        final_file_path, decomp_file.name)
-
-                    # Verify patch was applied successfully by comparing hashes
-                    with open(final_file_path, 'rb') as final_file:
-                        local_post_patch_hash = self.__get_sha1sum(final_file)
-                        if local_post_patch_hash != post_patch_hash:
-                            raise RuntimeError
-            else:
-                # Hash mismatch, don't proceed any further
-                raise RuntimeError
-        else:
-            # Hash mismatch, don't proceed any further
-            raise RuntimeError
-
-    def __decompress_bz2(self, comp_file, decomp_file):
-        """Decompress the downloaded bz2 file.
+    def __decompress_bz2(self, comp_file_path, decomp_file_path, decomp_hash):
+        """Decompress the downloaded bz2 file more efficiently.
 
         :param comp_file_path: The path to the compressed file.
         :param decomp_file_path: The path the decompressed file will be
                                  written to.
+        :return: True on success, False on failure.
         """
 
         chunk_size = 65536
+        comp_file_size = os.path.getsize(comp_file_path)
+        filename = os.path.basename(comp_file_path)
 
-        decompressor = bz2.BZ2Decompressor()
+        with bz2.BZ2File(comp_file_path, 'rb') as comp_file:
+            with open(decomp_file_path, 'wb') as decomp_file:
+                with tqdm(
+                        total=comp_file_size, unit='B', unit_scale=True,
+                        desc=f'Decompressing {filename}',
+                        leave=False, ascii=" █") as pbar:
+                    while True:
+                        data = comp_file.read(chunk_size)
+                        if not data:
+                            break
+                        decomp_file.write(data)
+                        pbar.update(len(data))
 
-        comp_file.seek(0)
-        while True:
-            data = comp_file.read(chunk_size)
-            if not data:
-                break
-            decomp_file.write(decompressor.decompress(data))
+        # Verify decompressed file hash
+        with open(decomp_file_path, 'rb') as decomp_file:
+            local_decomp_hash = self.__get_sha1sum(decomp_file)
+            if local_decomp_hash != decomp_hash:
+                # Hash mismatch, something went wrong with decompression
+                print(f'\nFailed to decompress {filename}.')
+                return False
+
+        return True
+
+    def __process_decompressed_file(self, ttr_dir, temp_dir, file_info):
+        """Processes the decompressed download. Full downloads are moved into
+        the TTR directory while patches are applied to existing files using
+        bsdiff4.
+
+        :param ttr_dir: The currently set installation path in launcher.json.
+        :param temp_dir: The temporary directory to download files to.
+        :param file_info: The file info dictionary.
+        :return: True on success, False on failure.
+        """
+
+        dl_type = file_info['type']
+        local_filename = file_info['local_filename']
+        temp_file_path = os.path.join(temp_dir, local_filename)
+        final_file_path = os.path.join(ttr_dir, local_filename)
+
+        if dl_type == 'full':
+            # Move decompressed file to install directory
+            shutil.move(temp_file_path, final_file_path)
+        elif dl_type == 'patch':
+            # Apply the bsdiff4 patch inplace
+            bsdiff4.file_patch_inplace(final_file_path, temp_file_path)
+
+            # Verify patch was applied successfully by comparing hashes
+            with open(final_file_path, 'rb') as final_file:
+                post_patch_hash = file_info['post_patch_hash']
+                local_post_patch_hash = self.__get_sha1sum(final_file)
+                if local_post_patch_hash != post_patch_hash:
+                    # Hash mismatch, something went wrong with the patch
+                    print(f'\nFailed to apply patch to {local_filename}')
+                    return False
+
+        return True
 
     def check_update(self, ttr_dir, patch_manifest):
         """Checks for updates for Toontown Rewritten and installs them.

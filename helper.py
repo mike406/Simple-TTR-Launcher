@@ -152,7 +152,7 @@ def quit_launcher(ret=0):
     sys.exit(ret)
 
 
-def retry(count, interval, callback, **kwargs):
+def retry(count, interval, callback, print_retries=True, **kwargs):
     """Wrapper function to try executing a function a certain number of times
     at an interval in seconds. To trigger a failed attempt the callback
     must return a falsy value or raise an exception. None is not treated as
@@ -161,28 +161,31 @@ def retry(count, interval, callback, **kwargs):
     :param count: The amount of times to try executing a function.
     :param interval: The amount of seconds to wait between each attempt.
     :param callback: The callback function.
+    :param print_retries: Show or hide Retrying message.
     :param **kwargs: The arguments for the callback function.
     :return: The result of the callback.
     """
 
-    exception = None
     attempt = 0
 
     while attempt < count:
+        exception = None
         try:
             result = callback(**kwargs)
             if result is None:
                 break
             if not result:
                 if attempt < count:
-                    print('Retrying...')
+                    if print_retries:
+                        print('Retrying...')
                     time.sleep(interval)
             else:
                 break
         except Exception as ex:
             exception = ex
             if attempt < count:
-                print('Retrying...')
+                if print_retries:
+                    print('Retrying...')
                 time.sleep(interval)
         attempt += 1
 
