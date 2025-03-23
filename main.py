@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-"""Sets up up the STTRL menu and launcher."""
+"""Sets up the STTRL menu and launcher."""
 
-import webbrowser
 import sys
+import webbrowser
 import helper
 from launcher import Launcher
 
@@ -12,24 +12,48 @@ def show_menu(launcher, redraw=True):
     """Displays the Main Menu of the launcher.
 
     :param launcher: A Launcher object.
-    :param redraw: Used to check if menu list should be output to console.
+    :param redraw: Flag to redraw the menu.
     :return: The new redraw status flag.
     """
 
+    version = 'v3.2'
+
+    # Menu items
     menu = {
         1: 'Play',
         2: 'Add an account',
         3: 'Change a stored password',
         4: 'Remove an account',
-        5: 'More options',
+        5: 'Launcher settings',
         6: 'Toontown Rewritten website',
         7: 'Toontown Rewritten server status',
         8: 'ToonHQ (Invasions, Groups and more!)'
     }
 
+    # Calculate the length of the longest menu item's text
+    longest_string = max(menu.values(), key=len)
+    border_box_width = len(longest_string) + 7
+    box_label = " Simple TTR Launcher "
+    box_label_len = len(box_label)
+
+    # Draw the menu if redraw is True
     if redraw:
+        # Build a top border using our calculated width
+        print(
+            f'╔═{box_label:═>2}{"":═>{border_box_width - box_label_len - 1}}╗')
+
+        # Show the version number
+        print(f'║{version:>{border_box_width - 2}}{"":>2}║')
+
+        # Print menu items
         for num, item in menu.items():
-            print(f'{num}. {item}')
+            print(f'║  {num}. {item:{border_box_width - 5}}║')
+
+        # Print empty space before bottom border
+        print(f'║{"":^{border_box_width}}║')
+
+        # Use the calculated width again for the bottom border
+        print(f'╚{"═":═^{border_box_width}}╝')
 
     redraw = choose_menu_item(launcher, len(menu))
 
@@ -116,8 +140,27 @@ def show_options_menu(launcher, clear=True):
         4: f'{choice_logging} showing game log in console',
     }
 
+    # Calculate the length of the longest menu item's text
+    longest_string = max(menu.values(), key=len)
+    border_box_width = len(longest_string) + 7
+    box_label = " Settings "
+    box_label_len = len(box_label)
+
+    # Build a top border using our calculated width
+    print(f'╔═{box_label:═>2}{"":═>{border_box_width - box_label_len - 1}}╗')
+
+    # Print empty space after top border
+    print(f'║{"":^{border_box_width}}║')
+
+    # Print menu items
     for num, item in menu.items():
-        print(f'{num}. {item}')
+        print(f'║  {num}. {item:{border_box_width - 5}}║')
+
+    # Print empty space before bottom border
+    print(f'║{"":^{border_box_width}}║')
+
+    # Use the calculated width again for the bottom border
+    print(f'╚{"═":═^{border_box_width}}╝')
 
     choose_options_menu_item(launcher, len(menu))
 
@@ -132,7 +175,7 @@ def choose_options_menu_item(launcher, num_menu_items):
 
     clear = True
     selection = helper.confirm(
-        'Choose an option or 0 to return: ', 0, num_menu_items)
+        'Choose an option or enter 0 to return: ', 0, num_menu_items)
 
     if selection == 1:
         helper.clear()

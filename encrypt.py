@@ -167,7 +167,8 @@ class Encrypt:
                     'You can use a master password to encrypt your stored '
                     'accounts.\n'
                     'You can turn this feature off (and decrypt your '
-                    'passwords) by going to "More options" in the Main Menu.')
+                    'passwords) by going to "Launcher settings" in the '
+                    'Main Menu.')
 
             # Create the master password
             master_password = pwinput.pwinput('Create a master password: ')
