@@ -362,35 +362,19 @@ class Patcher:
                 # Locate where the temporary directory is
                 temp_dir = os.path.join(tempfile.gettempdir(), temp)
 
-                # Build list of params for downloads, decompression
-                # and processing. Each list item is a tuple of parameters
-                # that are used with executor.submit() for multithreading
+                # Build list of params for downloads
                 download_file_params = []
-                decompress_bz2_params = []
-                process_decompressed_file_params = []
                 for filename in download_info:
                     # Files to download
                     download_file_params.append(
-                        (temp_dir, download_info[filename],
+                        (ttr_dir, temp_dir, download_info[filename],
                             filename, self.mirrors))
-
-                    # Files to decompress
-                    comp_file_path = os.path.join(temp_dir, filename)
-                    decomp_file_path = os.path.join(
-                        temp_dir, download_info[filename]['local_filename'])
-                    decomp_hash = download_info[filename]['hash']
-                    decompress_bz2_params.append(
-                        (comp_file_path, decomp_file_path, decomp_hash))
-
-                    # Decompressed files to process
-                    process_decompressed_file_params.append(
-                        (ttr_dir, temp_dir, download_info[filename]))
 
                 # Download files
                 with concurrent.futures.ThreadPoolExecutor(
                         max_workers=self.cpus) as executor:
                     futures = [executor.submit(
-                        self.__download_file, i[0], i[1], i[2], i[3]
+                        self.__download_file, i[0], i[1], i[2], i[3], i[4]
                         ) for i in download_file_params]
 
                 # Check for any failed downloads
@@ -400,45 +384,17 @@ class Patcher:
                             '\nOne or more downloads failed. '
                             'Please try again in a few minutes.')
                         return False
-
-                # Decompress files
-                with concurrent.futures.ThreadPoolExecutor(
-                        max_workers=self.cpus) as executor:
-                    futures = [executor.submit(
-                        self.__decompress_bz2, i[0], i[1], i[2]
-                        ) for i in decompress_bz2_params]
-
-                # Check for any failed file decompressions
-                for future in concurrent.futures.as_completed(futures):
-                    if not future.result():
-                        print(
-                            '\nOne or more files failed to decompress. '
-                            'Please try again in a few minutes.')
-                        return False
-
-                # Process downloaded files
-                with concurrent.futures.ThreadPoolExecutor(
-                        max_workers=self.cpus) as executor:
-                    futures = [executor.submit(
-                        self.__process_decompressed_file, i[0], i[1], i[2]
-                        ) for i in process_decompressed_file_params]
-
-                # Check for any failed patches
-                for future in concurrent.futures.as_completed(futures):
-                    if not future.result():
-                        print(
-                            '\nOne or more patches failed to apply. '
-                            'Please try again in a few minutes.')
-                        return False
         except FileNotFoundError:
             print('\nFailed to create temporary directory.')
             return False
 
         return True
 
-    def __download_file(self, temp_dir, file_info, remote_filename, mirrors):
+    def __download_file(
+            self, ttr_dir, temp_dir, file_info, remote_filename, mirrors):
         """Downloads a file from a mirror.
 
+        :param ttr_dir: The currently set installation path in launcher.json.
         :param temp_dir: The temporary directory to download files to.
         :param file_info: The file info dictionary.
         :param remote_filename: The file to download.
@@ -449,6 +405,8 @@ class Patcher:
         mirror = mirrors[0]
         local_filename = file_info['local_filename']
         comp_hash = file_info['comp_hash']
+        decomp_file_path = os.path.join(temp_dir, local_filename)
+        decomp_hash = file_info['hash']
         chunk_size = 65536
 
         # Attempt to download the file
@@ -482,6 +440,18 @@ class Patcher:
                     # Hash mismatch, mark this download as failed
                     print(f'\nFailed to download {local_filename}.')
                     return False
+
+            # Decompress file
+            res = self.__decompress_bz2(
+                temp_file_path, decomp_file_path, decomp_hash)
+            if not res:
+                return False
+
+            # Process decompressed file
+            res = self.__process_decompressed_file(
+                ttr_dir, temp_dir, file_info)
+            if not res:
+                return False
         except (FileNotFoundError, requests.exceptions.RequestException):
             print(f'\nFailed to download {local_filename}.')
 
