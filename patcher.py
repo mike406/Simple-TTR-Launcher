@@ -31,9 +31,11 @@ class Patcher:
         self.session = requests.Session()
         self.request_timeout = 30
         self.mirrors = None
+        self.retry_count = 3
+        self.retry_timeout = 10
         try:
             self.mirrors = helper.retry(
-                3, 5, self.__get_mirrors)
+                self.retry_count, self.retry_timeout, self.__get_mirrors)
         except requests.exceptions.RequestException:
             print(
                 '\nCould not get the download mirrors. '
@@ -102,7 +104,8 @@ class Patcher:
             # Download the patch manifest and load it as a json object
             try:
                 patch_manifest = helper.retry(
-                    3, 5, self.__get_patch_manifest,
+                    self.retry_count, self.retry_timeout,
+                    self.__get_patch_manifest,
                     patch_manifest=patch_manifest)
             except requests.exceptions.RequestException:
                 print(
@@ -326,7 +329,7 @@ class Patcher:
     def __get_sha1sum(self, file_obj):
         """Hashes and returns sha1sum of the contents of a file object.
 
-        :param file: The file object.
+        :param file_obj: The file object.
         :return: The sha1sum of the file.
         """
 
@@ -374,7 +377,8 @@ class Patcher:
                 with concurrent.futures.ThreadPoolExecutor(
                         max_workers=self.cpus) as executor:
                     futures = [executor.submit(
-                        self.__download_file, i[0], i[1], i[2], i[3], i[4]
+                        self.__attempt_download_file,
+                        i[0], i[1], i[2], i[3], i[4]
                         ) for i in download_file_params]
 
                 # Check for any failed downloads
@@ -389,6 +393,24 @@ class Patcher:
             return False
 
         return True
+
+    def __attempt_download_file(
+            self, ttr_dir, temp_dir, file_info, remote_filename, mirrors):
+        """Wrapper for __download_file. Used for attempting and retrying a
+        failed download.
+
+        :param ttr_dir: The currently set installation path in launcher.json.
+        :param temp_dir: The temporary directory to download files to.
+        :param file_info: The file info dictionary.
+        :param remote_filename: The file to download.
+        :param mirrors: The list of download mirrors.
+        :return: True on success, False on failure.
+        """
+
+        return helper.retry(
+            self.retry_count, self.retry_timeout, self.__download_file,
+            False, ttr_dir=ttr_dir, temp_dir=temp_dir, file_info=file_info,
+            remote_filename=remote_filename, mirrors=mirrors)
 
     def __download_file(
             self, ttr_dir, temp_dir, file_info, remote_filename, mirrors):
@@ -411,12 +433,10 @@ class Patcher:
 
         # Attempt to download the file
         try:
-            request = helper.retry(
-                3, 5, self.session.get, False,
+            response = requests.get(
                 url=urljoin(mirror, remote_filename),
                 timeout=self.request_timeout, stream=True)
-
-            request.raise_for_status()
+            response.raise_for_status()
 
             # Open temporary file for writing
             temp_file_path = os.path.join(temp_dir, remote_filename)
@@ -424,12 +444,12 @@ class Patcher:
                 # Display progress of writing the file with tqdm
                 with tqdm.wrapattr(
                         comp_file, 'write',
-                        total=int(request.headers.get('Content-Length')),
+                        total=int(response.headers.get('Content-Length')),
                         unit='B', unit_scale=True,
                         desc=f'Downloading {local_filename}', leave=False,
-                        ascii=" █") as fobj:
+                        ascii=' █') as fobj:
                     # Write to the file in chunks
-                    for chunk in request.iter_content(
+                    for chunk in response.iter_content(
                             chunk_size=chunk_size):
                         fobj.write(chunk)
 
@@ -437,8 +457,7 @@ class Patcher:
             with open(temp_file_path, 'rb') as comp_file:
                 local_comp_hash = self.__get_sha1sum(comp_file)
                 if local_comp_hash != comp_hash:
-                    # Hash mismatch, mark this download as failed
-                    print(f'\nFailed to download {local_filename}.')
+                    # Hash mismatch, fail the download
                     return False
 
             # Decompress file
@@ -453,8 +472,6 @@ class Patcher:
             if not res:
                 return False
         except (FileNotFoundError, requests.exceptions.RequestException):
-            print(f'\nFailed to download {local_filename}.')
-
             if len(mirrors) > 1:
                 mirrors.remove(mirror)
 
@@ -468,6 +485,7 @@ class Patcher:
         :param comp_file_path: The path to the compressed file.
         :param decomp_file_path: The path the decompressed file will be
                                  written to.
+        :param decomp_hash: The hash to verify the decompress file.
         :return: True on success, False on failure.
         """
 
@@ -480,7 +498,7 @@ class Patcher:
                 with tqdm(
                         total=comp_file_size, unit='B', unit_scale=True,
                         desc=f'Decompressing {filename}',
-                        leave=False, ascii=" █") as pbar:
+                        leave=False, ascii=' █') as pbar:
                     while True:
                         data = comp_file.read(chunk_size)
                         if not data:
