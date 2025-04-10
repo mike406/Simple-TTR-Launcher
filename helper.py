@@ -48,7 +48,8 @@ def load_launcher_json():
                         },
                         "launcher": {
                             "ttr-dir": ttr_dir,
-                            "use-stored-accounts": True,
+                            "use-stored-accounts": False,
+                            "use-password-encryption": False,
                             "display-logging": False
                         }
                     }

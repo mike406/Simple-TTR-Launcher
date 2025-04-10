@@ -36,13 +36,10 @@ class Launcher:
         self.encrypt = encrypt.Encrypt(self.settings_data)
 
         if len(sys.argv) != 3:
-            # If password encryption has never been used, ask user to enable it
-            if 'use-password-encryption' not in self.settings_data['launcher']:
-                self.encrypt.manage_password_encryption(self.settings_data)
-                print()
-
             # Notify user if they have manually disabled password encryption
-            if not self.settings_data['launcher']['use-password-encryption']:
+            store = self.settings_data['launcher']['use-stored-accounts']
+            enc = self.settings_data['launcher']['use-password-encryption']
+            if (store and not enc):
                 print("WARNING: Password encryption is not enabled!\n")
 
             if self.settings_data['launcher']['use-password-encryption']:
@@ -337,6 +334,12 @@ class Launcher:
         helper.update_launcher_json(self.settings_data)
         print('\nAccount has been added.')
 
+        # Set up account storage and encryption if it hasn't been yet
+        store = self.settings_data['launcher']['use-stored-accounts']
+        enc = self.settings_data['launcher']['use-password-encryption']
+        if (not store and not enc):
+            self.toggle_account_storage()
+
         return True
 
     def change_account(self):
@@ -506,6 +509,14 @@ class Launcher:
 
         self.settings_data['launcher']['use-stored-accounts'] = (
             not self.settings_data['launcher']['use-stored-accounts'])
+
+        # If password encryption is disabled when account storage has
+        # been turned on, enable encryption and prompt user to set master pass
+        enc = self.settings_data['launcher']['use-password-encryption']
+        store = self.settings_data['launcher']['use-stored-accounts']
+        if (store and not enc):
+            self.manage_password_encryption()
+
         helper.update_launcher_json(self.settings_data)
 
     def toggle_game_log_display(self):
