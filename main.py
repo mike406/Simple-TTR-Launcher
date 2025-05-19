@@ -114,22 +114,16 @@ def show_options_menu(launcher, clear=True):
 
     setting_key = 'use-password-encryption'
     choice_encrypt = 'Enable'
-    if setting_key not in launcher.settings_data['launcher']:
-        launcher.settings_data['launcher'][setting_key] = False
     if launcher.settings_data['launcher'][setting_key]:
         choice_encrypt = 'Disable'
 
     setting_key = 'use-stored-accounts'
     choice_account_storage = 'Enable'
-    if setting_key not in launcher.settings_data['launcher']:
-        launcher.settings_data['launcher'][setting_key] = False
     if launcher.settings_data['launcher'][setting_key]:
         choice_account_storage = 'Disable'
 
     setting_key = 'display-logging'
     choice_logging = 'Enable'
-    if setting_key not in launcher.settings_data['launcher']:
-        launcher.settings_data['launcher'][setting_key] = False
     if launcher.settings_data['launcher'][setting_key]:
         choice_logging = 'Disable'
 

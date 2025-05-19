@@ -102,6 +102,18 @@ def fix_settings_data(settings_data):
         updated = True
         settings_data['launcher']['ttr-dir'] = os.path.expanduser(ttr_dir)
 
+    if 'use-password-encryption' not in settings_data['launcher']:
+        updated = True
+        settings_data['launcher']['use-password-encryption'] = False
+
+    if 'use-stored-accounts' not in settings_data['launcher']:
+        updated = True
+        settings_data['launcher']['use-stored-accounts'] = False
+
+    if 'display-logging' not in settings_data['launcher']:
+        updated = True
+        settings_data['launcher']['display-logging'] = False
+
     if updated:
         update_launcher_json(settings_data)
 
