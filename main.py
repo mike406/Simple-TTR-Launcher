@@ -16,7 +16,7 @@ def show_menu(launcher, redraw=True):
     :return: The new redraw status flag.
     """
 
-    version = 'v3.2'
+    version = 'v3.3'
 
     # Menu items
     menu = {
@@ -122,6 +122,11 @@ def show_options_menu(launcher, clear=True):
     if launcher.settings_data['launcher'][setting_key]:
         choice_account_storage = 'Disable'
 
+    setting_key = 'use-os-keyring'
+    choice_keyring = 'Enable'
+    if launcher.settings_data['launcher'][setting_key]:
+        choice_keyring = 'Disable'
+
     setting_key = 'display-logging'
     choice_logging = 'Enable'
     if launcher.settings_data['launcher'][setting_key]:
@@ -131,7 +136,8 @@ def show_options_menu(launcher, clear=True):
         1: 'Change Toontown Rewritten installation path',
         2: f'{choice_encrypt} password encryption',
         3: f'{choice_account_storage} account storage',
-        4: f'{choice_logging} showing game log in console',
+        4: f'{choice_keyring} OS keyring for account storage',
+        5: f'{choice_logging} showing game log in console',
     }
 
     # Calculate the length of the longest menu item's text
@@ -182,8 +188,13 @@ def choose_options_menu_item(launcher, num_menu_items):
         print()
         clear = False
     elif selection == 3:
-        launcher.toggle_account_storage()
+        encryption_enabled = launcher.toggle_account_storage()
+        if encryption_enabled:
+            print()
+            clear = False
     elif selection == 4:
+        launcher.toggle_os_keyring()
+    elif selection == 5:
         launcher.toggle_game_log_display()
 
     if selection != 0:

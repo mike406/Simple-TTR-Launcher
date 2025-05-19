@@ -2,6 +2,7 @@ argon2-cffi
 bsdiff4
 cffi
 cryptography
+keyring
 pwinput
 requests
 tqdm

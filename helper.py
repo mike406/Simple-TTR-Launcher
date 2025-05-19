@@ -7,6 +7,7 @@ import platform
 import sys
 import time
 import json
+import keyring
 
 if platform.system() == 'Windows':
     import winreg
@@ -50,7 +51,8 @@ def load_launcher_json():
                             "ttr-dir": ttr_dir,
                             "use-stored-accounts": False,
                             "use-password-encryption": False,
-                            "display-logging": False
+                            "display-logging": False,
+                            "use-os-keyring": True
                         }
                     }
 
@@ -109,6 +111,13 @@ def fix_settings_data(settings_data):
     if 'use-stored-accounts' not in settings_data['launcher']:
         updated = True
         settings_data['launcher']['use-stored-accounts'] = False
+
+    if 'use-os-keyring' not in settings_data['launcher']:
+        updated = True
+        if 'account1' in settings_data['accounts']:
+            settings_data['launcher']['use-os-keyring'] = False
+        else:
+            settings_data['launcher']['use-os-keyring'] = True
 
     if 'display-logging' not in settings_data['launcher']:
         updated = True
@@ -215,3 +224,72 @@ def clear():
         os.system('cls')
     else:
         os.system('clear')
+
+
+def add_keyring_account(username, password):
+    """Add account to the OS Keyring.
+
+    :return: True on success, False on failure.
+    """
+
+    try:
+        keyring.set_password('Simple-TTR-Launcher', username, password)
+    except keyring.errors.InitError:
+        print('\nFailed to create a new keyring. No changes have been made.')
+        return False
+    except keyring.errors.PasswordSetError:
+        print('\nFailed to add account to keyring. No changes have been made.')
+        return False
+    except keyring.errors.KeyringLocked:
+        print('\nFailed to unlock the keyring. No changes have been made.')
+        return False
+    except keyring.errors.KeyringError:
+        print('\nFailed to access keyring. No changes have been made.')
+        return False
+
+    return True
+
+
+def remove_keyring_account(username):
+    """Remove account from the OS Keyring.
+
+    :return: True on success, False on failure.
+    """
+
+    try:
+        keyring.delete_password('Simple-TTR-Launcher', username)
+    except keyring.errors.InitError:
+        print('\nFailed to create a new keyring. No changes have been made.')
+        return False
+    except keyring.errors.PasswordDeleteError:
+        # Special case, happens if user removed password from keyring manually
+        # Treat as success so it gets cleaned up from launcher.json
+        return True
+    except keyring.errors.KeyringLocked:
+        print('\nFailed to unlock the keyring. No changes have been made.')
+        return False
+    except keyring.errors.KeyringError:
+        print('\nFailed to access keyring. No changes have been made.')
+        return False
+
+    return True
+
+
+def get_keyring_password(username):
+    """Retrieve account password from the OS Keyring.
+
+    :return: The password or None if it could not be retrieved.
+    """
+
+    password = None
+
+    try:
+        password = keyring.get_password('Simple-TTR-Launcher', username)
+    except keyring.errors.InitError:
+        print('\nKeyring does not exist. Unable to retrieve password.')
+    except keyring.errors.KeyringLocked:
+        print('\nFailed to unlock the keyring. Unable to retrieve password.')
+    except keyring.errors.KeyringError:
+        print('\nFailed to access keyring. Unable to retrieve password.')
+
+    return password

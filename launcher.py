@@ -35,7 +35,8 @@ class Launcher:
         self.settings_data = helper.load_launcher_json()
         self.encrypt = encrypt.Encrypt(self.settings_data)
 
-        if len(sys.argv) != 3:
+        if (len(sys.argv) != 3
+                and not self.settings_data['launcher']['use-os-keyring']):
             # Notify user if they have manually disabled password encryption
             store = self.settings_data['launcher']['use-stored-accounts']
             enc = self.settings_data['launcher']['use-password-encryption']
@@ -300,8 +301,9 @@ class Launcher:
     def add_account(self):
         """Adds a new account to launcher.json.
 
-        :return: True if account was added, or False if the user cancels
-                 or if the master password is incorrect.
+        :return: True if account was added, or False if the user cancels,
+                 if the master password is incorrect if encryption is enabled
+                 or if an error ocurred with the OS Keyring if it is in use.
         """
 
         username = input('Enter username to store or 0 to cancel: ')
@@ -327,6 +329,12 @@ class Launcher:
 
         num_accounts = len(self.settings_data['accounts'])
 
+        # If OS keyring is being used, add it there
+        if self.settings_data['launcher']['use-os-keyring']:
+            if not helper.add_keyring_account(username, password):
+                return False
+            password = 'KEYRING_PASS'
+
         # Add new account to json
         new_account = {'username': username, 'password': password}
         self.settings_data[
@@ -343,26 +351,30 @@ class Launcher:
         return True
 
     def change_account(self):
-        """Changes a stored password for an account stored in launcher.json."""
+        """Changes a stored password for an account stored in launcher.json.
+
+        :return: True if password was changed, or False if the user cancels,
+                 if the master password is incorrect if encryption is enabled
+                 or if an error ocurred with the OS Keyring if it is in use.
+        """
 
         num_accounts = len(self.settings_data['accounts'])
 
         if num_accounts == 0:
             print('No accounts to change. Please add one first.')
-            return
+            return False
 
         print('Which account do you wish to modify?')
         for num in range(num_accounts):
-            account = self.settings_data[
-                "accounts"][f"account{num + 1}"]["username"]
+            account = self.settings_data['accounts'][f'account{num + 1}']
             print(
-                f'{num + 1}. {account}')
+                f'{num + 1}. {account['username']}')
 
         selection = helper.confirm(
             'Enter account number or 0 to cancel: ', 0, num_accounts)
 
         if selection == 0:
-            return
+            return False
 
         password = pwinput.pwinput('Enter new password: ')
 
@@ -374,10 +386,18 @@ class Launcher:
                 self.settings_data, msg)
 
             if not master_password:
-                return
+                return False
 
             password = self.encrypt.encrypt(
                 master_password, password).decode('utf-8')
+
+        # If OS keyring is being used, add it there
+        if self.settings_data['launcher']['use-os-keyring']:
+            username = self.settings_data[
+                'accounts'][f'account{selection}']['username']
+            if not helper.add_keyring_account(username, password):
+                return False
+            password = 'KEYRING_PASS'
 
         # Set new password in json
         self.settings_data[
@@ -386,25 +406,38 @@ class Launcher:
 
         print('\nPassword has been changed.')
 
+        return True
+
     def remove_account(self):
-        """Removes an existing account from launcher.json."""
+        """Removes an existing account from launcher.json.
+
+        :return: True if account was removed, or False if the user cancels
+                 or if an error ocurred with the OS Keyring if it is in use.
+        """
 
         num_accounts = len(self.settings_data['accounts'])
         if num_accounts == 0:
             print('No accounts to remove.')
-            return
+            return False
 
         print('Which account do you wish to delete?')
         for num in range(num_accounts):
             account = self.settings_data[
-                "accounts"][f"account{num + 1}"]["username"]
+                'accounts'][f'account{num + 1}']['username']
             print(
                 f'{num + 1}. {account}')
 
         selection = helper.confirm(
             'Enter account number or 0 to cancel: ', 0, num_accounts)
         if selection == 0:
-            return
+            return False
+
+        # If OS keyring is being used, remove the account from it
+        if self.settings_data['launcher']['use-os-keyring']:
+            username = self.settings_data[
+                'accounts'][f'account{selection}']['username']
+            if not helper.remove_keyring_account(username):
+                return False
 
         # Remove account from json
         del self.settings_data['accounts'][f'account{selection}']
@@ -417,6 +450,8 @@ class Launcher:
 
         helper.update_launcher_json(self.settings_data)
         print('\nAccount has been removed.')
+
+        return True
 
     def change_ttr_dir(self):
         """Sets or modifies the TTR installation directory."""
@@ -474,9 +509,13 @@ class Launcher:
                 username = (
                     self.settings_data[
                         'accounts'][f'account{selection}']['username'])
-                password = (
-                    self.settings_data[
-                        'accounts'][f'account{selection}']['password'])
+
+                if self.settings_data['launcher']['use-os-keyring']:
+                    password = helper.get_keyring_password(username)
+                else:
+                    password = (
+                        self.settings_data[
+                            'accounts'][f'account{selection}']['password'])
 
                 # If password encryption is being used, decrypt the password
                 if self.settings_data['launcher']['use-password-encryption']:
@@ -505,7 +544,12 @@ class Launcher:
         self.encrypt.manage_password_encryption(self.settings_data)
 
     def toggle_account_storage(self):
-        """Enable or disable the account storage feature."""
+        """Enable or disable the account storage feature.
+
+        :return: True if encryption was turned on, False if not.
+        """
+
+        encryption_has_been_enabled = False
 
         self.settings_data['launcher']['use-stored-accounts'] = (
             not self.settings_data['launcher']['use-stored-accounts'])
@@ -514,10 +558,15 @@ class Launcher:
         # been turned on, enable encryption and prompt user to set master pass
         enc = self.settings_data['launcher']['use-password-encryption']
         store = self.settings_data['launcher']['use-stored-accounts']
-        if (store and not enc):
+        use_os_keyring = self.settings_data['launcher']['use-os-keyring']
+
+        if (store and not enc and not use_os_keyring):
             self.manage_password_encryption()
+            encryption_has_been_enabled = True
 
         helper.update_launcher_json(self.settings_data)
+
+        return encryption_has_been_enabled
 
     def toggle_game_log_display(self):
         """Enable or disable logging game to console."""
@@ -525,3 +574,41 @@ class Launcher:
         self.settings_data['launcher']['display-logging'] = (
             not self.settings_data['launcher']['display-logging'])
         helper.update_launcher_json(self.settings_data)
+
+    def toggle_os_keyring(self):
+        """Allow the user to switch between using STTRL's launcher.json
+        or the OS native Keyring for account storage."""
+
+        if 'account1' in self.settings_data['accounts']:
+            print(
+                '\nYou are currently storing at least one account.'
+                ' If you wish to switch storage modes, your stored accounts'
+                ' need to be cleared and you will need to add them again.'
+            )
+
+            change_storage_mode = helper.confirm(
+                'Enter 1 to confirm or 0 to cancel: ', 0, 1)
+
+            if change_storage_mode:
+                num_accounts = len(self.settings_data['accounts'])
+                for num in range(num_accounts):
+                    acc = f'account{num + 1}'
+                    username = self.settings_data['accounts'][acc]['username']
+                    del self.settings_data['accounts'][acc]
+                    if self.settings_data['launcher']['use-os-keyring']:
+                        helper.remove_keyring_account(username)
+            else:
+                return
+
+        self.settings_data['launcher']['use-os-keyring'] = (
+            not self.settings_data['launcher']['use-os-keyring'])
+        helper.update_launcher_json(self.settings_data)
+
+        # If password encryption is disabled when keyring has
+        # been turned off, enable encryption and prompt user to set master pass
+        enc = self.settings_data['launcher']['use-password-encryption']
+        store = self.settings_data['launcher']['use-stored-accounts']
+        use_os_keyring = self.settings_data['launcher']['use-os-keyring']
+
+        if (store and not enc and not use_os_keyring):
+            self.manage_password_encryption()

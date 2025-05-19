@@ -61,10 +61,22 @@ class Encrypt:
         # Encrypt all existing account passwords
         for num in range(num_accounts):
             acc = f'account{num + 1}'
-            password = settings_data['accounts'][acc]['password'].encode(
-                'utf-8')
+            username = settings_data['accounts'][acc]['username']
+
+            if settings_data['launcher']['use-os-keyring']:
+                password = helper.get_keyring_password(username).encode(
+                    'utf-8')
+            else:
+                password = settings_data['accounts'][acc]['password'].encode(
+                    'utf-8')
+
             password_encrypted = fernet.encrypt(password).decode('utf-8')
-            settings_data['accounts'][acc]['password'] = password_encrypted
+
+            if settings_data['launcher']['use-os-keyring']:
+                helper.add_keyring_account(username, password_encrypted)
+                settings_data['accounts'][acc]['password'] = 'KEYRING_PASS'
+            else:
+                settings_data['accounts'][acc]['password'] = password_encrypted
 
         # Encrypted version of the salt will be used for verification
         salt_encrypted = fernet.encrypt(self.salt).decode('utf-8')
@@ -95,10 +107,20 @@ class Encrypt:
         # Decrypt all existing account passwords
         for num in range(num_accounts):
             acc = f'account{num + 1}'
-            password = settings_data['accounts'][acc]['password'].encode(
-                'utf-8')
+
+            if settings_data['launcher']['use-os-keyring']:
+                username = settings_data['accounts'][acc]['username']
+                password = helper.get_keyring_password(username).encode(
+                    'utf-8')
+            else:
+                password = settings_data['accounts'][acc]['password'].encode(
+                    'utf-8')
+
             password_decrypted = fernet.decrypt(password).decode('utf-8')
-            settings_data['accounts'][acc]['password'] = password_decrypted
+            if settings_data['launcher']['use-os-keyring']:
+                helper.add_keyring_account(username, password_decrypted)
+            else:
+                settings_data['accounts'][acc]['password'] = password_decrypted
 
         settings_data['launcher']['use-password-encryption'] = False
         del settings_data['launcher']['password-salt']
