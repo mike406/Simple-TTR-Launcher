@@ -231,7 +231,7 @@ class Encrypt:
         # Encrypt the data
         fernet = Fernet(key)
         data = data.encode('utf-8')
-        data_encrypted = fernet.encrypt(data)
+        data_encrypted = fernet.encrypt(data).decode('utf-8')
 
         return data_encrypted
 
@@ -249,7 +249,7 @@ class Encrypt:
         # Decrypt the data
         fernet = Fernet(key)
         data = data.encode('utf-8')
-        data_decrypted = fernet.decrypt(data)
+        data_decrypted = fernet.decrypt(data).decode('utf-8')
 
         return data_decrypted
 

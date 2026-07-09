@@ -325,7 +325,7 @@ class Launcher:
                 return False
 
             password = self.encrypt.encrypt(
-                master_password, password).decode('utf-8')
+                master_password, password)
 
         num_accounts = len(self.settings_data['accounts'])
 
@@ -389,7 +389,7 @@ class Launcher:
                 return False
 
             password = self.encrypt.encrypt(
-                master_password, password).decode('utf-8')
+                master_password, password)
 
         # If OS keyring is being used, add it there
         if self.settings_data['launcher']['use-os-keyring']:
@@ -525,7 +525,7 @@ class Launcher:
                         return
 
                     password = self.encrypt.decrypt(
-                        master_password, password).decode('utf-8')
+                        master_password, password)
 
         # Alternative login methods
         if len(sys.argv) == 3:
