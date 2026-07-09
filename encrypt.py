@@ -351,6 +351,14 @@ class Encrypt:
                  or False if the user enters the password incorrect 3 times.
         """
 
+        # Get current hashing params
+        hashing_params = self.check_hashing_params(
+            settings_data, check_mismatch=False)
+
+        # Encode the test data for later decryption
+        test_data = settings_data[
+            'launcher']['password-verification'].encode('utf-8')
+
         bad_password = 0
         while bad_password < 3:
             try:
@@ -360,16 +368,12 @@ class Encrypt:
                 master_password_encoded = master_password.encode('utf-8')
 
                 # Derive our key using master password and salt
-                hashing_params = self.check_hashing_params(
-                    settings_data, check_mismatch=False)
                 key = self.__derive_key(
                     master_password_encoded, hashing_params)
 
-                # Try to decrypt the test value in password-verification
-                test = settings_data[
-                    'launcher']['password-verification'].encode('utf-8')
+                # Try to decrypt the test data in password-verification
                 fernet = Fernet(key)
-                fernet.decrypt(test)
+                fernet.decrypt(test_data)
             except InvalidToken:
                 print('The password entered was incorrect.')
                 bad_password += 1
