@@ -19,7 +19,7 @@ def show_menu(launcher):
     :return: The new redraw status.
     """
 
-    version = 'v3.3'
+    version = 'v3.4'
     redraw = 1
 
     # Menu items
@@ -31,7 +31,8 @@ def show_menu(launcher):
         5: 'Launcher settings',
         6: 'Toontown Rewritten website',
         7: 'Toontown Rewritten server status',
-        8: 'ToonHQ (Invasions, Groups and more!)'
+        8: 'Toontown Rewritten Wiki',
+        9: 'ToonHQ (Invasions, Groups and more!)',
     }
 
     # Calculate the length of the longest menu item's text
@@ -86,6 +87,10 @@ def show_menu(launcher):
             webbrowser.open('https://toon.town/status')
             redraw = 0
         elif selection == 8:
+            print('\nOpened web browser.')
+            webbrowser.open('https://toontownrewritten.wiki')
+            redraw = 0
+        elif selection == 9:
             print('\nOpened web browser.')
             webbrowser.open('https://toonhq.org')
             redraw = 0
