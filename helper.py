@@ -92,7 +92,7 @@ def update_launcher_json(settings_data):
 def fix_settings_data(settings_data):
     """Runs known fixes on settings_data.
     Fixes applied:
-    - Run os.path.expandpath() on ttr-dir if path starts with a ~
+    - Run os.path.expanduser() on ttr-dir if path starts with a ~
 
     :param settings_data: The settings from launcher.json using json.load().
     """
