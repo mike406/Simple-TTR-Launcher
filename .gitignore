@@ -1,5 +1,7 @@
 __pycache__
-python-venv
-patchmanifest
+build/
+dist/
+python-venv/
 *.json
 *.old
+*.spec
