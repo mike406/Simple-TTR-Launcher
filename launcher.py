@@ -40,7 +40,7 @@ class Launcher:
             # Notify user if they have manually disabled password encryption
             store = self.settings_data['launcher']['use-stored-accounts']
             enc = self.settings_data['launcher']['use-password-encryption']
-            if (store and not enc):
+            if store and not enc:
                 print("WARNING: Password encryption is not enabled!\n")
 
             if self.settings_data['launcher']['use-password-encryption']:
@@ -345,7 +345,7 @@ class Launcher:
         # Set up account storage and encryption if it hasn't been yet
         store = self.settings_data['launcher']['use-stored-accounts']
         enc = self.settings_data['launcher']['use-password-encryption']
-        if (not store and not enc):
+        if not store and not enc:
             self.toggle_account_storage()
 
         return True
@@ -561,7 +561,7 @@ class Launcher:
         store = self.settings_data['launcher']['use-stored-accounts']
         use_os_keyring = self.settings_data['launcher']['use-os-keyring']
 
-        if (store and not enc and not use_os_keyring):
+        if store and not enc and not use_os_keyring:
             self.manage_password_encryption()
             encryption_has_been_enabled = True
 
@@ -575,7 +575,7 @@ class Launcher:
 
         if 'account1' in self.settings_data['accounts']:
             print(
-                '\nYou are currently storing at least one account.'
+                'You are currently storing at least one account.'
                 ' If you wish to switch storage modes, your stored accounts'
                 ' need to be cleared and you will need to add them again.'
             )
@@ -604,7 +604,7 @@ class Launcher:
         store = self.settings_data['launcher']['use-stored-accounts']
         use_os_keyring = self.settings_data['launcher']['use-os-keyring']
 
-        if (store and not enc and not use_os_keyring):
+        if store and not enc and not use_os_keyring:
             self.manage_password_encryption()
             encryption_has_been_enabled = True
 
