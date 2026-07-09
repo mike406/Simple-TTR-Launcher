@@ -453,21 +453,6 @@ class Launcher:
 
         return True
 
-    def change_ttr_dir(self):
-        """Sets or modifies the TTR installation directory."""
-
-        if 'ttr-dir' in self.settings_data['launcher']:
-            cur = self.settings_data['launcher']['ttr-dir']
-            print(f'Current installation path: {cur}')
-
-        ttr_dir = input(
-            'Enter your desired installation path or 0 to cancel: ')
-        if ttr_dir != '0':
-            self.settings_data['launcher']['ttr-dir'] = os.path.expanduser(
-                ttr_dir)
-            helper.update_launcher_json(self.settings_data)
-            print('\nInstallation path has been set.')
-
     def prepare_login(self):
         """Start of the login process. This function can handle a couple of
         scenarios:
@@ -538,6 +523,21 @@ class Launcher:
 
         self.__login_worker(username, password)
 
+    def change_ttr_dir(self):
+        """Sets or modifies the TTR installation directory."""
+
+        if 'ttr-dir' in self.settings_data['launcher']:
+            cur = self.settings_data['launcher']['ttr-dir']
+            print(f'Current installation path: {cur}')
+
+        ttr_dir = input(
+            'Enter your desired installation path or 0 to cancel: ')
+        if ttr_dir != '0':
+            self.settings_data['launcher']['ttr-dir'] = os.path.expanduser(
+                ttr_dir)
+            helper.update_launcher_json(self.settings_data)
+            print('\nInstallation path has been set.')
+
     def manage_password_encryption(self):
         """Allows the user to enable or disable password encryption."""
 
@@ -553,6 +553,7 @@ class Launcher:
 
         self.settings_data['launcher']['use-stored-accounts'] = (
             not self.settings_data['launcher']['use-stored-accounts'])
+        helper.update_launcher_json(self.settings_data)
 
         # If password encryption is disabled when account storage has
         # been turned on, enable encryption and prompt user to set master pass
@@ -564,20 +565,13 @@ class Launcher:
             self.manage_password_encryption()
             encryption_has_been_enabled = True
 
-        helper.update_launcher_json(self.settings_data)
-
         return encryption_has_been_enabled
-
-    def toggle_game_log_display(self):
-        """Enable or disable logging game to console."""
-
-        self.settings_data['launcher']['display-logging'] = (
-            not self.settings_data['launcher']['display-logging'])
-        helper.update_launcher_json(self.settings_data)
 
     def toggle_os_keyring(self):
         """Allow the user to switch between using STTRL's launcher.json
         or the OS native Keyring for account storage."""
+
+        encryption_has_been_enabled = False
 
         if 'account1' in self.settings_data['accounts']:
             print(
@@ -612,3 +606,13 @@ class Launcher:
 
         if (store and not enc and not use_os_keyring):
             self.manage_password_encryption()
+            encryption_has_been_enabled = True
+
+        return encryption_has_been_enabled
+
+    def toggle_game_log_display(self):
+        """Enable or disable logging game to console."""
+
+        self.settings_data['launcher']['display-logging'] = (
+            not self.settings_data['launcher']['display-logging'])
+        helper.update_launcher_json(self.settings_data)
