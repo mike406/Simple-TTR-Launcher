@@ -49,7 +49,29 @@ class Encrypt:
 
         num_accounts = len(settings_data['accounts'])
 
-        # Set argon parameters
+        # Current hashing parameters
+        argon_t_cur = settings_data['launcher']['hashing-params']['t']
+        argon_m_cur = settings_data['launcher']['hashing-params']['m']
+        argon_p_cur = settings_data['launcher']['hashing-params']['p']
+
+        # Set new hashing parameters
+        settings_data['launcher']['hashing-params'] = dict(self.hashing_params)
+
+        # Generate a new salt
+        current_hashing_parameters = {
+            't': argon_t_cur,
+            'm': argon_m_cur,
+            'p': argon_p_cur
+        }
+        key = self.__derive_key(
+            master_password_encoded, current_hashing_parameters)
+        fernet = Fernet(key)
+        self.salt = os.urandom(self.salt_length)
+        salt_encrypted = fernet.encrypt(self.salt).decode('utf-8')
+        settings_data[
+            'launcher']['password-verification'] = salt_encrypted
+
+        # Set new hashing parameters
         settings_data['launcher']['hashing-params'] = dict(self.hashing_params)
 
         # Derive our key using master password and salt
@@ -77,6 +99,13 @@ class Encrypt:
                 settings_data['accounts'][acc]['password'] = 'KEYRING_PASS'
             else:
                 settings_data['accounts'][acc]['password'] = password_encrypted
+
+        settings_data['launcher']['use-password-encryption'] = True
+
+        # Store the salt in base64 as we'll need it to derive the same key
+        settings_data[
+            'launcher']['password-salt'] = base64.urlsafe_b64encode(
+                self.salt).decode('utf-8')
 
         # Encrypted version of the salt will be used for verification
         salt_encrypted = fernet.encrypt(self.salt).decode('utf-8')
@@ -196,12 +225,6 @@ class Encrypt:
             master_password = pwinput.pwinput('Create a master password: ')
             master_password_encoded = master_password.encode('utf-8')
 
-            # Store the salt in base64 as we'll need it to derive the same key
-            settings_data['launcher']['use-password-encryption'] = True
-            settings_data[
-                'launcher']['password-salt'] = base64.urlsafe_b64encode(
-                    self.salt).decode('utf-8')
-
             # Encrypt any existing accounts using the key
             success = '\nYour master password has been set.'
             if len(settings_data['accounts']) > 0:
@@ -304,6 +327,12 @@ class Encrypt:
                 mismatch = True
 
             if mismatch:
+                current_hashing_parameters = {
+                    't': argon_t_cur,
+                    'm': argon_m_cur,
+                    'p': argon_p_cur
+                }
+
                 # Need to re-encrypt all data with required parameters
                 print(
                     'To improve security your passwords will need to be '
@@ -320,14 +349,7 @@ class Encrypt:
                 # Decrypt everything using the current parameters
                 self.__decrypt_accounts(
                     master_password_encoded, settings_data,
-                    {'t': argon_t_cur, 'm': argon_m_cur, 'p': argon_p_cur})
-
-                # Store new hashing params
-                settings_data['launcher']['hashing-params'] = {
-                    't': argon_t,
-                    'm': argon_m,
-                    'p': argon_p
-                }
+                    current_hashing_parameters)
 
                 # Re-encrypt using the new parameters
                 self.manage_password_encryption(settings_data, True)
