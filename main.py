@@ -195,7 +195,7 @@ def main():
     launcher = Launcher()
 
     # Skip menu if using command line args, else show menu
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 2:
         launcher.prepare_login()
     else:
         try:

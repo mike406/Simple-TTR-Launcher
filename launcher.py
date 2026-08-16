@@ -465,7 +465,7 @@ class Launcher:
         # Check if use-stored-accounts is set
         use_stored_accounts = self.settings_data[
             'launcher']['use-stored-accounts']
-        if use_stored_accounts and len(sys.argv) != 3:
+        if use_stored_accounts:
             num_accounts = len(self.settings_data['accounts'])
             if num_accounts == 0:
                 # Ask user to add an account if none exist yet
@@ -473,9 +473,18 @@ class Launcher:
                 if not account:
                     return
 
-            # Ask user to select account if more than one is stored
+            # Select account
             selection = 1
-            if num_accounts > 1:
+            if len(sys.argv) == 2:
+                try:
+                    print('Logging in with CLI arguments...')
+                    selection = sys.argv[1]
+                    if int(selection) > num_accounts:
+                        raise ValueError
+                except ValueError:
+                    print('Parameter must be a valid account number.')
+                    return
+            elif num_accounts > 1:
                 print('Which account do you wish to log in?')
                 for num in range(num_accounts):
                     account = (
@@ -511,13 +520,8 @@ class Launcher:
 
                     password = self.encrypt.decrypt(
                         master_password, password)
-
-        # Alternative login methods
-        if len(sys.argv) == 3:
-            print('Logging in with CLI arguments...')
-            username = sys.argv[1]
-            password = sys.argv[2]
-        elif not use_stored_accounts:
+        else:
+            # Alternative login method
             username = input('Enter username: ')
             password = pwinput.pwinput('Enter password: ')
 
