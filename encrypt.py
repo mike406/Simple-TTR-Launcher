@@ -1,6 +1,6 @@
 """Handles password encryption for the launcher.
 It uses a user-created master password to encrypt account passwords.
-The KDF used currently is argon2id from argon2-cffi and is used with Fernet
+The KDF used currently is argon2id and is used with Fernet
 to encrypt passwords. The parameters used for argon2id are as defined in
 RFC 9106 using the second recommended option for better compatibility with
 devices that have lower amounts of memory.
@@ -11,9 +11,7 @@ import os
 import base64
 import pwinput
 from cryptography.fernet import Fernet, InvalidToken
-from argon2.low_level import hash_secret_raw
-from argon2.low_level import Type
-from argon2.profiles import RFC_9106_LOW_MEMORY
+from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 import helper
 
 
@@ -24,11 +22,11 @@ class Encrypt:
         """Initialize Encrypt class and store salt if it exists."""
 
         self.salt_length = 16
-        self.argon_type = Type.ID
+        self.hash_length = 32
         self.hashing_params = {
-            't': RFC_9106_LOW_MEMORY.time_cost,
-            'm': RFC_9106_LOW_MEMORY.memory_cost,
-            'p': RFC_9106_LOW_MEMORY.parallelism
+            't': 3,
+            'm': 65536,
+            'p': 4
         }
 
         if 'password-salt' in settings_data['launcher']:
@@ -166,14 +164,14 @@ class Encrypt:
         :return: The derived key.
         """
 
-        key = hash_secret_raw(
-            secret=master_password_encoded,
+        kdf = Argon2id(
             salt=self.salt,
-            time_cost=hashing_params['t'],
+            length=self.hash_length,
+            iterations=hashing_params['t'],
             memory_cost=hashing_params['m'],
-            parallelism=hashing_params['p'],
-            hash_len=32,
-            type=self.argon_type)
+            lanes=hashing_params['p'])
+
+        key = kdf.derive(master_password_encoded)
 
         return base64.urlsafe_b64encode(key)
 
