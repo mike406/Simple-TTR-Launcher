@@ -481,10 +481,12 @@ class Launcher:
             selection = 1
             if len(sys.argv) == 2:
                 try:
-                    print('Logging in with CLI arguments...')
                     selection = sys.argv[1]
                     if int(selection) > num_accounts:
                         raise ValueError
+                    print(
+                        'Logging in account '
+                        f'{self.settings_data["accounts"][f"account{selection}"]["username"]}')
                 except ValueError:
                     print('Parameter must be a valid account number.')
                     return
