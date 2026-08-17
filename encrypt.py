@@ -29,12 +29,6 @@ class Encrypt:
             'p': 4
         }
 
-        if 'password-salt' in settings_data['launcher']:
-            self.salt = base64.urlsafe_b64decode(
-                settings_data['launcher']['password-salt'])
-        else:
-            self.salt = os.urandom(self.salt_length)
-
     def __encrypt_accounts(self, master_password_encoded, settings_data):
         """Encrypts all currently stored accounts using the master password
         and salt.
@@ -47,42 +41,26 @@ class Encrypt:
 
         num_accounts = len(settings_data['accounts'])
 
-        # Current hashing parameters
-        argon_t_cur = settings_data['launcher']['hashing-params']['t']
-        argon_m_cur = settings_data['launcher']['hashing-params']['m']
-        argon_p_cur = settings_data['launcher']['hashing-params']['p']
-
         # Set new hashing parameters
         settings_data['launcher']['hashing-params'] = dict(self.hashing_params)
-
-        # Generate a new salt
-        current_hashing_parameters = {
-            't': argon_t_cur,
-            'm': argon_m_cur,
-            'p': argon_p_cur
-        }
-        key = self.__derive_key(
-            master_password_encoded, current_hashing_parameters)
-        fernet = Fernet(key)
-        self.salt = os.urandom(self.salt_length)
-        salt_encrypted = fernet.encrypt(self.salt).decode('utf-8')
-        settings_data[
-            'launcher']['password-verification'] = salt_encrypted
-
-        # Set new hashing parameters
-        settings_data['launcher']['hashing-params'] = dict(self.hashing_params)
-
-        # Derive our key using master password and salt
-        key = self.__derive_key(master_password_encoded, self.hashing_params)
-
-        # Use Fernet class to encrypt each password using our key
-        fernet = Fernet(key)
 
         # Encrypt all existing account passwords
         for num in range(num_accounts):
+            # Generate a new salt
+            salt = os.urandom(self.salt_length)
+
+            # Derive our key using master password and salt
+            key = self.__derive_key(
+                master_password_encoded, salt, self.hashing_params)
+
+            # Use Fernet class to encrypt each password using our key
+            fernet = Fernet(key)
+
+            # Get account username
             acc = f'account{num + 1}'
             username = settings_data['accounts'][acc]['username']
 
+            # Get current password
             if settings_data['launcher']['use-os-keyring']:
                 password = helper.get_keyring_password(username).encode(
                     'utf-8')
@@ -90,24 +68,35 @@ class Encrypt:
                 password = settings_data['accounts'][acc]['password'].encode(
                     'utf-8')
 
+            # Encrypt the current password
             password_encrypted = fernet.encrypt(password).decode('utf-8')
 
+            # Store the encrypted password depending on which method is in use
             if settings_data['launcher']['use-os-keyring']:
                 helper.add_keyring_account(username, password_encrypted)
                 settings_data['accounts'][acc]['password'] = 'KEYRING_PASS'
             else:
                 settings_data['accounts'][acc]['password'] = password_encrypted
 
+            # Store the salt for this account in base64
+            settings_data['accounts'][acc]['salt'] = base64.urlsafe_b64encode(
+                salt).decode('utf-8')
+
         settings_data['launcher']['use-password-encryption'] = True
 
-        # Store the salt in base64 as we'll need it to derive the same key
+        # Generate a salt for password verification
+        verification_salt = os.urandom(self.salt_length)
         settings_data[
-            'launcher']['password-salt'] = base64.urlsafe_b64encode(
-                self.salt).decode('utf-8')
+            'launcher']['salt-verification'] = base64.urlsafe_b64encode(
+                verification_salt).decode('utf-8')
 
-        # Encrypted version of the salt will be used for verification
-        salt_encrypted = fernet.encrypt(self.salt).decode('utf-8')
-        settings_data['launcher']['password-verification'] = salt_encrypted
+        key = self.__derive_key(
+            master_password_encoded, verification_salt, self.hashing_params)
+        fernet = Fernet(key)
+
+        # Encrypt the bytes and store them for password verification
+        encrypted_bytes = fernet.encrypt(verification_salt).decode('utf-8')
+        settings_data['launcher']['password-verification'] = encrypted_bytes
 
         return settings_data
 
@@ -125,16 +114,23 @@ class Encrypt:
 
         num_accounts = len(settings_data['accounts'])
 
-        # Derive our key using master password and salt
-        key = self.__derive_key(master_password_encoded, hashing_params)
-
-        # Use Fernet class to decrypt each password using our key
-        fernet = Fernet(key)
-
         # Decrypt all existing account passwords
         for num in range(num_accounts):
+            # Get account
             acc = f'account{num + 1}'
 
+            # Get account salt
+            salt = base64.urlsafe_b64decode(
+                settings_data['accounts'][acc]['salt'])
+
+            # Derive our key using master password and salt
+            key = self.__derive_key(
+                master_password_encoded, salt, hashing_params)
+
+            # Use Fernet class to decrypt each password using our key
+            fernet = Fernet(key)
+
+            # Get the current password
             if settings_data['launcher']['use-os-keyring']:
                 username = settings_data['accounts'][acc]['username']
                 password = helper.get_keyring_password(username).encode(
@@ -143,29 +139,36 @@ class Encrypt:
                 password = settings_data['accounts'][acc]['password'].encode(
                     'utf-8')
 
+            # Decrypt the current password
             password_decrypted = fernet.decrypt(password).decode('utf-8')
+
+            # Store the decrypted password depending on which method is in use
             if settings_data['launcher']['use-os-keyring']:
                 helper.add_keyring_account(username, password_decrypted)
             else:
                 settings_data['accounts'][acc]['password'] = password_decrypted
 
+            # Delete the account salt
+            del settings_data['accounts'][acc]['salt']
+
         settings_data['launcher']['use-password-encryption'] = False
-        del settings_data['launcher']['password-salt']
         del settings_data['launcher']['password-verification']
+        del settings_data['launcher']['salt-verification']
 
         return settings_data
 
-    def __derive_key(self, master_password_encoded, hashing_params):
+    def __derive_key(self, master_password_encoded, salt, hashing_params):
         """Wrapper function for deriving the key using the master password
         and salt.
 
         :param master_password_encoded: The master password as a byte string.
+        :param salt: The salt for the KDF.
         :param hashing_params: Hashing parameters for argon as a dict.
         :return: The derived key.
         """
 
         kdf = Argon2id(
-            salt=self.salt,
+            salt=salt,
             length=self.hash_length,
             iterations=hashing_params['t'],
             memory_cost=hashing_params['m'],
@@ -243,29 +246,38 @@ class Encrypt:
 
         :param master_password_encoded: The master password as a byte string.
         :param data: The data that will be encrypted.
-        :return: The encrypted data.
+        :return: The encrypted data and salt as a tuple.
         """
+        # Generate a new salt
+        salt = os.urandom(self.salt_length)
+        salt_encoded = base64.urlsafe_b64encode(salt).decode('utf-8')
 
         # Derive our key using master password and salt
-        key = self.__derive_key(master_password_encoded, self.hashing_params)
+        key = self.__derive_key(
+            master_password_encoded, salt, self.hashing_params)
 
         # Encrypt the data
         fernet = Fernet(key)
         data = data.encode('utf-8')
         data_encrypted = fernet.encrypt(data).decode('utf-8')
 
-        return data_encrypted
+        return (data_encrypted, salt_encoded)
 
-    def decrypt(self, master_password_encoded, data):
+    def decrypt(self, master_password_encoded, data, salt):
         """Decrypts data using the master password and salt.
 
         :param master_password_encoded: The master password as a byte string.
         :param data: The data that will be decrypted.
+        :param salt: The salt associated with the encrypted data.
         :return: The decrypted data.
         """
 
+        # Decode the salt
+        salt_decoded = base64.urlsafe_b64decode(salt)
+
         # Derive our key using master password and salt
-        key = self.__derive_key(master_password_encoded, self.hashing_params)
+        key = self.__derive_key(
+            master_password_encoded, salt_decoded, self.hashing_params)
 
         # Decrypt the data
         fernet = Fernet(key)
@@ -375,6 +387,10 @@ class Encrypt:
         hashing_params = self.check_hashing_params(
             settings_data, check_mismatch=False)
 
+        # Get the verification salt
+        verification_salt = base64.urlsafe_b64decode(settings_data[
+            'launcher']['salt-verification'])
+
         # Encode the test data for later decryption
         test_data = settings_data[
             'launcher']['password-verification'].encode('utf-8')
@@ -389,7 +405,7 @@ class Encrypt:
 
                 # Derive our key using master password and salt
                 key = self.__derive_key(
-                    master_password_encoded, hashing_params)
+                    master_password_encoded, verification_salt, hashing_params)
 
                 # Try to decrypt the test data in password-verification
                 fernet = Fernet(key)

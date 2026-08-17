@@ -324,8 +324,7 @@ class Launcher:
             if not master_password:
                 return False
 
-            password = self.encrypt.encrypt(
-                master_password, password)
+            (password, salt) = self.encrypt.encrypt(master_password, password)
 
         num_accounts = len(self.settings_data['accounts'])
 
@@ -336,16 +335,22 @@ class Launcher:
             password = 'KEYRING_PASS'
 
         # Add new account to json
-        new_account = {'username': username, 'password': password}
+        new_acc = {'username': username, 'password': password}
         self.settings_data[
-            'accounts'][f'account{num_accounts + 1}'] = new_account
+            'accounts'][f'account{num_accounts + 1}'] = new_acc
+
+        # Add salt if encryption is enabled
+        if self.settings_data['launcher']['use-password-encryption']:
+            self.settings_data[
+                'accounts'][f'account{num_accounts + 1}']['salt'] = salt
+
         helper.update_launcher_json(self.settings_data)
         print('\nAccount has been added.')
 
         # Set up account storage and encryption if it hasn't been yet
         store = self.settings_data['launcher']['use-stored-accounts']
         enc = self.settings_data['launcher']['use-password-encryption']
-        if not store and not enc:
+        if not store:
             self.toggle_account_storage()
 
         return True
@@ -388,8 +393,7 @@ class Launcher:
             if not master_password:
                 return False
 
-            password = self.encrypt.encrypt(
-                master_password, password)
+            (password, salt) = self.encrypt.encrypt(master_password, password)
 
         # If OS keyring is being used, add it there
         if self.settings_data['launcher']['use-os-keyring']:
@@ -399,9 +403,15 @@ class Launcher:
                 return False
             password = 'KEYRING_PASS'
 
-        # Set new password in json
+        # Set new password
         self.settings_data[
             'accounts'][f'account{selection}']['password'] = password
+
+        # Set new salt if encryption is enabled
+        if self.settings_data['launcher']['use-password-encryption']:
+            self.settings_data[
+                'accounts'][f'account{selection}']['salt'] = salt
+
         helper.update_launcher_json(self.settings_data)
 
         print('\nPassword has been changed.')
@@ -518,8 +528,11 @@ class Launcher:
                     if not master_password:
                         return
 
+                    salt = self.settings_data[
+                        'accounts'][f'account{selection}']['salt']
+
                     password = self.encrypt.decrypt(
-                        master_password, password)
+                        master_password, password, salt)
         else:
             # Alternative login method
             username = input('Enter username: ')
