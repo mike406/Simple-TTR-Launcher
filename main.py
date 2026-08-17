@@ -19,7 +19,7 @@ def show_menu(launcher):
     :return: The new redraw status.
     """
 
-    version = 'v3.4'
+    version = 'v4.0'
     redraw = 1
 
     # Menu items
