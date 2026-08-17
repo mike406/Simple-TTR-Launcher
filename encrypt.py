@@ -29,6 +29,42 @@ class Encrypt:
             'p': 4
         }
 
+        # If settings_data['password-salt'] exists, upgrade to the new format
+        if 'password-salt' in settings_data['launcher']:
+            print(
+                'To improve security your passwords will need to be '
+                're-encrypted.')
+
+            master_password_encoded = self.verify_master_password(
+                settings_data)
+            if not master_password_encoded:
+                helper.quit_launcher()
+
+            num_accounts = len(settings_data['accounts'])
+            old_salt = settings_data['launcher']['password-salt']
+
+            # Decrypt existing passwords
+            for num in range(num_accounts):
+                acc = f'account{num + 1}'
+                password = settings_data['accounts'][acc]['password']
+                password_decrypted = self.decrypt(
+                    master_password_encoded, password, old_salt, settings_data['launcher']['hashing-params'])
+                settings_data['accounts'][acc]['password'] = password_decrypted
+
+            # Reset password encryption settings
+            settings_data['launcher']['use-password-encryption'] = False
+            del settings_data['launcher']['password-salt']
+            del settings_data['launcher']['password-verification']
+
+            # Re-encrypt passwords
+            self.manage_password_encryption(settings_data, upgrade=True)
+
+        # Check for new hashing params
+        if settings_data['launcher']['use-password-encryption']:
+            if not self.check_hashing_params(settings_data):
+                # Wrong password entered too many times
+                helper.quit_launcher()
+
     def __encrypt_accounts(self, master_password_encoded, settings_data):
         """Encrypts all currently stored accounts using the master password
         and salt.
@@ -263,7 +299,7 @@ class Encrypt:
 
         return (data_encrypted, salt_encoded)
 
-    def decrypt(self, master_password_encoded, data, salt):
+    def decrypt(self, master_password_encoded, data, salt, hashing_params=None):
         """Decrypts data using the master password and salt.
 
         :param master_password_encoded: The master password as a byte string.
@@ -272,12 +308,15 @@ class Encrypt:
         :return: The decrypted data.
         """
 
+        if hashing_params is None:
+            hashing_params = self.hashing_params
+
         # Decode the salt
         salt_decoded = base64.urlsafe_b64decode(salt)
 
         # Derive our key using master password and salt
         key = self.__derive_key(
-            master_password_encoded, salt_decoded, self.hashing_params)
+            master_password_encoded, salt_decoded, hashing_params)
 
         # Decrypt the data
         fernet = Fernet(key)
@@ -388,8 +427,12 @@ class Encrypt:
             settings_data, check_mismatch=False)
 
         # Get the verification salt
-        verification_salt = base64.urlsafe_b64decode(settings_data[
-            'launcher']['salt-verification'])
+        if 'password-salt' in settings_data['launcher']:
+            verification_salt = base64.urlsafe_b64decode(
+                settings_data['launcher']['password-salt'])
+        else:
+            verification_salt = base64.urlsafe_b64decode(
+                settings_data['launcher']['salt-verification'])
 
         # Encode the test data for later decryption
         test_data = settings_data[

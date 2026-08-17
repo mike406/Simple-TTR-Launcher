@@ -43,12 +43,6 @@ class Launcher:
             if store and not enc:
                 print("WARNING: Password encryption is not enabled!\n")
 
-            if self.settings_data['launcher']['use-password-encryption']:
-                # Check for new hashing params
-                if not self.encrypt.check_hashing_params(self.settings_data):
-                    # Wrong password entered too many times
-                    helper.quit_launcher()
-
     def __check_update(self, patch_manifest):
         """
         Checks for updates for Toontown Rewritten and installs them.
