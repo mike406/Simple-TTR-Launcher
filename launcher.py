@@ -41,7 +41,7 @@ class Launcher:
             store = self.settings_data['launcher']['use-stored-accounts']
             enc = self.settings_data['launcher']['use-password-encryption']
             if store and not enc:
-                print("WARNING: Password encryption is not enabled!\n")
+                print('WARNING: Password encryption is not enabled!\n')
 
     def __check_update(self, patch_manifest):
         """
@@ -203,7 +203,7 @@ class Launcher:
             eta = int(resp_data['eta'])
             if int(eta) == 0:
                 eta = 1
-            print(f"You are queued in position {position}.")
+            print(f'You are queued in position {position}.')
 
             # Wait ETA seconds (1 second minimum) to check if no longer
             # in queue
@@ -343,7 +343,6 @@ class Launcher:
 
         # Set up account storage and encryption if it hasn't been yet
         store = self.settings_data['launcher']['use-stored-accounts']
-        enc = self.settings_data['launcher']['use-password-encryption']
         if not store:
             self.toggle_account_storage()
 
@@ -486,7 +485,8 @@ class Launcher:
                         raise ValueError
                     print(
                         'Logging in account '
-                        f'{self.settings_data["accounts"][f"account{selection}"]["username"]}')
+                        f'{self.settings_data[
+                            "accounts"][f"account{selection}"]["username"]}')
                 except ValueError:
                     print('Parameter must be a valid account number.')
                     return
@@ -495,7 +495,7 @@ class Launcher:
                 for num in range(num_accounts):
                     account = (
                         self.settings_data[
-                            "accounts"][f"account{num + 1}"]["username"])
+                            'accounts'][f'account{num + 1}']['username'])
                     print(f'{num + 1}. {account}')
 
                 selection = helper.confirm(

@@ -38,7 +38,7 @@ def show_menu(launcher):
     # Calculate the length of the longest menu item's text
     longest_string = max(menu.values(), key=len)
     border_box_width = len(longest_string) + 7
-    box_label = " Simple TTR Launcher "
+    box_label = ' Simple TTR Launcher '
     box_label_len = len(box_label)
 
     while True:
@@ -46,7 +46,8 @@ def show_menu(launcher):
         if redraw > 0:
             # Build a top border using our calculated width
             print(
-                f'╔═{box_label:═>2}{"":═>{border_box_width - box_label_len - 1}}╗')
+                f'╔═{box_label:═>2}'
+                f'{"":═>{border_box_width - box_label_len - 1}}╗')
 
             # Show the version number
             print(f'║{version:>{border_box_width - 2}}{"":>2}║')
@@ -140,11 +141,12 @@ def show_options_menu(launcher):
         # Calculate the length of the longest menu item's text
         longest_string = max(menu.values(), key=len)
         border_box_width = len(longest_string) + 7
-        box_label = " Settings "
+        box_label = ' Settings '
         box_label_len = len(box_label)
 
         # Build a top border using our calculated width
-        print(f'╔═{box_label:═>2}{"":═>{border_box_width - box_label_len - 1}}╗')
+        print(
+            f'╔═{box_label:═>2}{"":═>{border_box_width - box_label_len - 1}}╗')
 
         # Print empty space after top border
         print(f'║{"":^{border_box_width}}║')

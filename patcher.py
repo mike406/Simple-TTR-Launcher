@@ -362,8 +362,8 @@ class Patcher:
         try:
             # Create a temporary directory to stage the downloads
             with tempfile.TemporaryDirectory(dir=ttr_dir) as temp:
-                bar = "{desc}: {percentage:.0f}%|{bar}| {n_fmt}/{total_fmt}"
-                desc = "Downloading files"
+                bar = '{desc}: {percentage:.0f}%|{bar}| {n_fmt}/{total_fmt}'
+                desc = 'Downloading files'
 
                 # Use a tqdm thread_map to download files concurrently
                 # Static parameters get repeated for each item in download_info
@@ -461,7 +461,7 @@ class Patcher:
                 return False
 
             # Log completed downloads
-            tqdm.write(f"Downloaded {local_filename}")
+            tqdm.write(f'Downloaded {local_filename}')
         except (FileNotFoundError, requests.exceptions.RequestException):
             if len(mirrors) > 1:
                 mirrors.remove(mirror)
