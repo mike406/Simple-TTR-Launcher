@@ -33,7 +33,7 @@ class Launcher:
 
         # Load launcher.json
         self.settings_data = helper.load_launcher_json()
-        self.encrypt = encrypt.Encrypt(self.settings_data)
+        self._encrypt = encrypt.Encrypt(self.settings_data)
 
         if (len(sys.argv) != 3
                 and not self.settings_data['launcher']['use-os-keyring']):
@@ -42,255 +42,6 @@ class Launcher:
             enc = self.settings_data['launcher']['use-password-encryption']
             if store and not enc:
                 print('WARNING: Password encryption is not enabled!\n')
-
-    def __check_update(self, patch_manifest):
-        """
-        Checks for updates for Toontown Rewritten and installs them.
-
-        :param patch_manifest: The patch manifest URL path.
-        """
-
-        return patcher.Patcher().check_update(
-            self.settings_data['launcher']['ttr-dir'], patch_manifest)
-
-    def __login_worker(self, username, password):
-        """Orchestrates calling functions for authentication, ToonGuard, 2FA
-        and launching the game.
-
-        :param username: The account's username.
-        :param password: The account's password.
-        """
-
-        # Information for TTR's login api
-        url = 'https://www.toontownrewritten.com/api/login?format=json'
-        headers = {'Content-type': 'application/x-www-form-urlencoded'}
-        data = {'username': username, 'password': password}
-
-        try:
-            # Check for incorrect login info
-            resp_data = self.__check_login_info(url, headers, data)
-            if resp_data is None:
-                self.__soft_fail()
-                return
-
-            # Check for toonguard or 2 factor
-            resp_data = self.__check_additional_auth(resp_data, url, headers)
-            if resp_data is None:
-                self.__soft_fail()
-                return
-
-            # Wait in queue
-            resp_data = self.__check_queue(resp_data, url, headers)
-            if resp_data is None:
-                self.__soft_fail()
-                return
-        except requests.exceptions.RequestException:
-            print(
-                '\nCould not connect to the Toontown Rewritten login server. '
-                'Please check your internet connection '
-                'as well as https://toon.town/status')
-            self.__soft_fail()
-        else:
-            # Check for game updates, only continue logging in if it succeeds
-            if not self.__check_update(resp_data['manifest']):
-                return
-
-            # Start game
-            try:
-                self.__start_game(resp_data)
-            except FileNotFoundError:
-                print(
-                    '\nCould not find Toontown Rewritten. '
-                    'Set your installation path at the Main Menu.')
-
-    def __do_request(self, url, headers, data, timeout=30):
-        """Uses requests.post to post data to TTR's login API.
-
-        :param url: TTR's login API endpoint.
-        :param headers: The headers that will be sent to the API.
-        :param data: The data that will be sent to the API.
-        :param timeout: The request timeout.
-        :return: The response data as a json object.
-        """
-
-        resp = requests.post(
-            url=url, data=data, headers=headers, timeout=timeout)
-        resp.raise_for_status()
-
-        return resp.json()
-
-    def __check_login_info(self, url, headers, data):
-        """Attemps authentcation using the username and password.
-
-        :param url: TTR's login API endpoint.
-        :param headers: The headers that will be sent to the API.
-        :param data: The data that will be sent to the API.
-        :return: The response data in json if successful
-                 or None if the API reports success == false.
-        """
-
-        # Attempt login
-        print('Requesting login...')
-        resp_data = helper.retry(
-            3, 5, self.__do_request, url=url, headers=headers, data=data)
-
-        # False means incorrect password or servers are under maintenance
-        if resp_data['success'] == 'false':
-            if 'banner' in resp_data:
-                banner = resp_data['banner']
-                print(f'\n{banner}')
-            else:
-                print(
-                    '\nUsername or password may be incorrect '
-                    'or the servers are down. '
-                    'Please check https://toon.town/status')
-            resp_data = None
-
-        return resp_data
-
-    def __check_additional_auth(self, resp_data, url, headers):
-        """Checks for ToonGuard or 2FA authentication methods.
-
-        :param resp_data: The json response data from
-                          self.__check_login_info().
-        :param url: TTR's login API endpoint.
-        :param headers: The headers that will be sent to the API.
-        :return: The response data in json if successful
-                 or None if the API reports success == false.
-        """
-
-        # Partial means TTR is looking for toonguard or 2FA so prompt
-        # user for it
-        while resp_data['success'] == 'partial':
-            print(resp_data['banner'])
-            token = input('Enter token: ')
-            data = {
-                'appToken': token.rstrip(),
-                'authToken': resp_data['responseToken']
-            }
-            resp_data = helper.retry(
-                3, 5, self.__do_request, url=url, headers=headers, data=data)
-
-        # Too many attempts were encountered
-        if resp_data['success'] == 'false':
-            if 'banner' in resp_data:
-                banner = resp_data['banner']
-                print(f'\n{banner}')
-            else:
-                print(
-                    '\nSomething is wrong with your token. '
-                    'You may be entering an invalid one too many times. '
-                    'Please try again later.')
-            resp_data = None
-
-        return resp_data
-
-    def __check_queue(self, resp_data, url, headers):
-        """Checks if user is waiting in queue (delayed status) and waits
-        until ready.
-
-        :param resp_data: The json response data from
-                          self.__check_additional_auth().
-        :param url: TTR's login API endpoint.
-        :param headers: The headers that will be sent to the API.
-        :return: The response data in json if successful
-                 or None if the API reports success == false.
-        """
-
-        # Check for queueToken
-        while resp_data['success'] == 'delayed':
-            position = resp_data['position']
-            eta = int(resp_data['eta'])
-            if int(eta) == 0:
-                eta = 1
-            print(f'You are queued in position {position}.')
-
-            # Wait ETA seconds (1 second minimum) to check if no longer
-            # in queue
-            time.sleep(eta)
-            data = {'queueToken': resp_data['queueToken']}
-            resp_data = helper.retry(
-                3, 5, self.__do_request, url=url, headers=headers, data=data)
-
-        # Something went wrong
-        if resp_data['success'] == 'false':
-            if 'banner' in resp_data:
-                banner = resp_data['banner']
-                print(f'\n\n{banner}')
-            else:
-                print(
-                    '\nSomething went wrong logging into the queue. '
-                    'Please try again later.')
-            resp_data = None
-
-        return resp_data
-
-    def __start_game(self, resp_data):
-        """Launches the game according to installation directory location.
-
-        :param resp_data: The json response data from self.__check_queue().
-        """
-
-        print('\nLogin successful!')
-
-        display_logging = False
-        if 'display-logging' in self.settings_data['launcher']:
-            display_logging = self.settings_data['launcher']['display-logging']
-
-        ttr_dir = self.settings_data['launcher']['ttr-dir']
-        ttr_gameserver = resp_data['gameserver']
-        ttr_playcookie = resp_data['cookie']
-
-        os.environ['TTR_GAMESERVER'] = ttr_gameserver
-        os.environ['TTR_PLAYCOOKIE'] = ttr_playcookie
-
-        win32_bin = 'TTREngine'
-        win64_bin = 'TTREngine64'
-        linux_bin = 'TTREngine'
-        darwin_bin = 'Toontown Rewritten'
-
-        operating_system = platform.system()
-        if operating_system == 'Windows':
-            if platform.machine().endswith('64'):
-                process = os.path.join(ttr_dir, win64_bin)
-            else:
-                process = os.path.join(ttr_dir, win32_bin)
-
-            stdout = subprocess.DEVNULL
-            stderr = subprocess.STDOUT
-            creationflags = subprocess.CREATE_NO_WINDOW
-            if display_logging:
-                stdout = None
-                stderr = None
-                creationflags = subprocess.CREATE_NEW_CONSOLE
-
-            subprocess.Popen(
-                args=process,
-                cwd=ttr_dir,
-                stdout=stdout,
-                stderr=stderr,
-                creationflags=creationflags)
-        elif operating_system in ['Linux', 'Darwin']:
-            binary = linux_bin if operating_system == 'Linux' else darwin_bin
-            process = os.path.join(ttr_dir, binary)
-            mode = (os.stat(process).st_mode
-                    | stat.S_IEXEC
-                    | stat.S_IXUSR
-                    | stat.S_IXGRP
-                    | stat.S_IXOTH)
-            os.chmod(process, mode)
-
-            if display_logging:
-                subprocess.run(args=process, cwd=ttr_dir, check=False)
-            else:
-                subprocess.Popen(
-                    args=process, cwd=ttr_dir, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.STDOUT, start_new_session=True)
-
-    def __soft_fail(self):
-        """Called when a recoverable login error is encountered."""
-
-        print('Login failed!')
 
     def add_account(self):
         """Adds a new account to launcher.json.
@@ -312,13 +63,13 @@ class Launcher:
         if self.settings_data['launcher']['use-password-encryption']:
             msg = ('\nYou have made too many password attempts. '
                    'No changes have been made.')
-            master_password = self.encrypt.verify_master_password(
+            master_password = self._encrypt.verify_master_password(
                 self.settings_data, msg)
 
             if not master_password:
                 return False
 
-            (password, salt) = self.encrypt.encrypt(master_password, password)
+            (password, salt) = self._encrypt.encrypt(master_password, password)
 
         num_accounts = len(self.settings_data['accounts'])
 
@@ -380,13 +131,13 @@ class Launcher:
         if self.settings_data['launcher']['use-password-encryption']:
             msg = ('\nYou have made too many password attempts. '
                    'No changes have been made.')
-            master_password = self.encrypt.verify_master_password(
+            master_password = self._encrypt.verify_master_password(
                 self.settings_data, msg)
 
             if not master_password:
                 return False
 
-            (password, salt) = self.encrypt.encrypt(master_password, password)
+            (password, salt) = self._encrypt.encrypt(master_password, password)
 
         # If OS keyring is being used, add it there
         if self.settings_data['launcher']['use-os-keyring']:
@@ -519,7 +270,7 @@ class Launcher:
 
                 # If password encryption is being used, decrypt the password
                 if self.settings_data['launcher']['use-password-encryption']:
-                    master_password = self.encrypt.verify_master_password(
+                    master_password = self._encrypt.verify_master_password(
                         self.settings_data)
                     if not master_password:
                         return
@@ -527,14 +278,14 @@ class Launcher:
                     salt = self.settings_data[
                         'accounts'][f'account{selection}']['salt']
 
-                    password = self.encrypt.decrypt(
+                    password = self._encrypt.decrypt(
                         master_password, password, salt)
         else:
             # Alternative login method
             username = input('Enter username: ')
             password = pwinput.pwinput('Enter password: ')
 
-        self.__login_worker(username, password)
+        self._login_worker(username, password)
 
     def change_ttr_dir(self):
         """Sets or modifies the TTR installation directory."""
@@ -554,7 +305,7 @@ class Launcher:
     def manage_password_encryption(self):
         """Allows the user to enable or disable password encryption."""
 
-        self.encrypt.manage_password_encryption(self.settings_data)
+        self._encrypt.manage_password_encryption(self.settings_data)
 
     def toggle_account_storage(self):
         """Enable or disable the account storage feature.
@@ -629,3 +380,252 @@ class Launcher:
         self.settings_data['launcher']['display-logging'] = (
             not self.settings_data['launcher']['display-logging'])
         helper.update_launcher_json(self.settings_data)
+
+    def _check_update(self, patch_manifest):
+        """
+        Checks for updates for Toontown Rewritten and installs them.
+
+        :param patch_manifest: The patch manifest URL path.
+        """
+
+        return patcher.Patcher().check_update(
+            self.settings_data['launcher']['ttr-dir'], patch_manifest)
+
+    def _login_worker(self, username, password):
+        """Orchestrates calling functions for authentication, ToonGuard, 2FA
+        and launching the game.
+
+        :param username: The account's username.
+        :param password: The account's password.
+        """
+
+        # Information for TTR's login api
+        url = 'https://www.toontownrewritten.com/api/login?format=json'
+        headers = {'Content-type': 'application/x-www-form-urlencoded'}
+        data = {'username': username, 'password': password}
+
+        try:
+            # Check for incorrect login info
+            resp_data = self._check_login_info(url, headers, data)
+            if resp_data is None:
+                self._soft_fail()
+                return
+
+            # Check for toonguard or 2 factor
+            resp_data = self._check_additional_auth(resp_data, url, headers)
+            if resp_data is None:
+                self._soft_fail()
+                return
+
+            # Wait in queue
+            resp_data = self._check_queue(resp_data, url, headers)
+            if resp_data is None:
+                self._soft_fail()
+                return
+        except requests.exceptions.RequestException:
+            print(
+                '\nCould not connect to the Toontown Rewritten login server. '
+                'Please check your internet connection '
+                'as well as https://toon.town/status')
+            self._soft_fail()
+        else:
+            # Check for game updates, only continue logging in if it succeeds
+            if not self._check_update(resp_data['manifest']):
+                return
+
+            # Start game
+            try:
+                self._start_game(resp_data)
+            except FileNotFoundError:
+                print(
+                    '\nCould not find Toontown Rewritten. '
+                    'Set your installation path at the Main Menu.')
+
+    def _do_request(self, url, headers, data, timeout=30):
+        """Uses requests.post to post data to TTR's login API.
+
+        :param url: TTR's login API endpoint.
+        :param headers: The headers that will be sent to the API.
+        :param data: The data that will be sent to the API.
+        :param timeout: The request timeout.
+        :return: The response data as a json object.
+        """
+
+        resp = requests.post(
+            url=url, data=data, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+
+        return resp.json()
+
+    def _check_login_info(self, url, headers, data):
+        """Attemps authentcation using the username and password.
+
+        :param url: TTR's login API endpoint.
+        :param headers: The headers that will be sent to the API.
+        :param data: The data that will be sent to the API.
+        :return: The response data in json if successful
+                 or None if the API reports success == false.
+        """
+
+        # Attempt login
+        print('Requesting login...')
+        resp_data = helper.retry(
+            3, 5, self._do_request, url=url, headers=headers, data=data)
+
+        # False means incorrect password or servers are under maintenance
+        if resp_data['success'] == 'false':
+            if 'banner' in resp_data:
+                banner = resp_data['banner']
+                print(f'\n{banner}')
+            else:
+                print(
+                    '\nUsername or password may be incorrect '
+                    'or the servers are down. '
+                    'Please check https://toon.town/status')
+            resp_data = None
+
+        return resp_data
+
+    def _check_additional_auth(self, resp_data, url, headers):
+        """Checks for ToonGuard or 2FA authentication methods.
+
+        :param resp_data: The json response data from
+                          self._check_login_info().
+        :param url: TTR's login API endpoint.
+        :param headers: The headers that will be sent to the API.
+        :return: The response data in json if successful
+                 or None if the API reports success == false.
+        """
+
+        # Partial means TTR is looking for toonguard or 2FA so prompt
+        # user for it
+        while resp_data['success'] == 'partial':
+            print(resp_data['banner'])
+            token = input('Enter token: ')
+            data = {
+                'appToken': token.rstrip(),
+                'authToken': resp_data['responseToken']
+            }
+            resp_data = helper.retry(
+                3, 5, self._do_request, url=url, headers=headers, data=data)
+
+        # Too many attempts were encountered
+        if resp_data['success'] == 'false':
+            if 'banner' in resp_data:
+                banner = resp_data['banner']
+                print(f'\n{banner}')
+            else:
+                print(
+                    '\nSomething is wrong with your token. '
+                    'You may be entering an invalid one too many times. '
+                    'Please try again later.')
+            resp_data = None
+
+        return resp_data
+
+    def _check_queue(self, resp_data, url, headers):
+        """Checks if user is waiting in queue (delayed status) and waits
+        until ready.
+
+        :param resp_data: The json response data from
+                          self._check_additional_auth().
+        :param url: TTR's login API endpoint.
+        :param headers: The headers that will be sent to the API.
+        :return: The response data in json if successful
+                 or None if the API reports success == false.
+        """
+
+        # Check for queueToken
+        while resp_data['success'] == 'delayed':
+            position = resp_data['position']
+            eta = int(resp_data['eta'])
+            if int(eta) == 0:
+                eta = 1
+            print(f'You are queued in position {position}.')
+
+            # Wait ETA seconds (1 second minimum) to check if no longer
+            # in queue
+            time.sleep(eta)
+            data = {'queueToken': resp_data['queueToken']}
+            resp_data = helper.retry(
+                3, 5, self._do_request, url=url, headers=headers, data=data)
+
+        # Something went wrong
+        if resp_data['success'] == 'false':
+            if 'banner' in resp_data:
+                banner = resp_data['banner']
+                print(f'\n\n{banner}')
+            else:
+                print(
+                    '\nSomething went wrong logging into the queue. '
+                    'Please try again later.')
+            resp_data = None
+
+        return resp_data
+
+    def _start_game(self, resp_data):
+        """Launches the game according to installation directory location.
+
+        :param resp_data: The json response data from self._check_queue().
+        """
+
+        print('\nLogin successful!')
+
+        display_logging = False
+        if 'display-logging' in self.settings_data['launcher']:
+            display_logging = self.settings_data['launcher']['display-logging']
+
+        ttr_dir = self.settings_data['launcher']['ttr-dir']
+        ttr_gameserver = resp_data['gameserver']
+        ttr_playcookie = resp_data['cookie']
+
+        os.environ['TTR_GAMESERVER'] = ttr_gameserver
+        os.environ['TTR_PLAYCOOKIE'] = ttr_playcookie
+
+        win32_bin = 'TTREngine'
+        win64_bin = 'TTREngine64'
+        linux_bin = 'TTREngine'
+        darwin_bin = 'Toontown Rewritten'
+
+        operating_system = platform.system()
+        if operating_system == 'Windows':
+            if platform.machine().endswith('64'):
+                process = os.path.join(ttr_dir, win64_bin)
+            else:
+                process = os.path.join(ttr_dir, win32_bin)
+
+            stdout = subprocess.DEVNULL
+            stderr = subprocess.STDOUT
+            creationflags = subprocess.CREATE_NO_WINDOW
+            if display_logging:
+                stdout = None
+                stderr = None
+                creationflags = subprocess.CREATE_NEW_CONSOLE
+
+            subprocess.Popen(
+                args=process,
+                cwd=ttr_dir,
+                stdout=stdout,
+                stderr=stderr,
+                creationflags=creationflags)
+        elif operating_system in ['Linux', 'Darwin']:
+            binary = linux_bin if operating_system == 'Linux' else darwin_bin
+            process = os.path.join(ttr_dir, binary)
+            mode = (os.stat(process).st_mode
+                    | stat.S_IEXEC
+                    | stat.S_IXUSR
+                    | stat.S_IXGRP
+                    | stat.S_IXOTH)
+            os.chmod(process, mode)
+
+            if display_logging:
+                subprocess.run(args=process, cwd=ttr_dir, check=False)
+            else:
+                subprocess.Popen(
+                    args=process, cwd=ttr_dir, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT, start_new_session=True)
+
+    def _soft_fail(self):
+        """Called when a recoverable login error is encountered."""
+
+        print('Login failed!')

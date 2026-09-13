@@ -20,22 +20,25 @@ import helper
 class Patcher:
     """Game files patcher class for the launcher."""
 
-    def __init__(self, debug=False):
-        """Initialize the patcher with available download mirrors."""
+    def __init__(self, debug=False, retry_count=3, retry_timeout=10):
+        """Initialize the patcher with available download mirrors.
 
-        self.debug = False
-        if debug:
-            self.debug = True
+        :param debug: Enable debug output.
+        :param retry_count: Retry count for downloads.
+        :param retry_timeout: Timeout between retries in seconds.
+        """
 
-        self.cpus = os.cpu_count()
-        self.session = requests.Session()
         self.request_timeout = 30
-        self.mirrors = None
-        self.retry_count = 3
-        self.retry_timeout = 10
+        self.debug = bool(debug)
+        self.retry_count = retry_count
+        self.retry_timeout = retry_timeout
+        self._cpus = os.cpu_count()
+        self._session = requests.Session()
+        self._mirrors = None
+
         try:
-            self.mirrors = helper.retry(
-                self.retry_count, self.retry_timeout, self.__get_mirrors)
+            self._mirrors = helper.retry(
+                self.retry_count, self.retry_timeout, self._get_mirrors)
         except requests.exceptions.RequestException:
             print(
                 '\nCould not get the download mirrors. '
@@ -47,14 +50,32 @@ class Patcher:
                 "It's possible that there is a problem with "
                 'the remote server. Please try again later.')
 
-    def __get_mirrors(self):
+    def check_update(self, ttr_dir, patch_manifest):
+        """Checks for updates for Toontown Rewritten and installs them.
+
+        :param ttr_dir: The currently set installation path in launcher.json.
+        :param patch_manifest: The patch manifest URL path.
+        :return: True on success, False if user declines or on failure.
+        """
+
+        # Check if TTR installation directory exists
+        if not self._check_install_path(ttr_dir):
+            return False
+
+        # Downloads and installs any new game files
+        if not self._patch_worker(ttr_dir, patch_manifest):
+            return False
+
+        return True
+
+    def _get_mirrors(self):
         """Gets available download mirrors.
 
         :return: The mirror URLs.
         """
 
         mirror_url = 'https://www.toontownrewritten.com/api/mirrors'
-        mirrors = self.session.get(
+        mirrors = self._session.get(
             url=mirror_url, timeout=self.request_timeout)
         mirrors.raise_for_status()
         mirrors = mirrors.json()
@@ -62,7 +83,7 @@ class Patcher:
 
         return mirrors
 
-    def __check_install_path(self, ttr_dir):
+    def _check_install_path(self, ttr_dir):
         """Checks if the installation path exists.
         Asks user to create the directory if it does not exist.
 
@@ -90,7 +111,7 @@ class Patcher:
 
         return True
 
-    def __patch_worker(self, ttr_dir, patch_manifest):
+    def _patch_worker(self, ttr_dir, patch_manifest):
         """Runs the patching process for Toontown Rewritten.
 
         :param ttr_dir: The currently set installation path in launcher.json.
@@ -98,14 +119,14 @@ class Patcher:
         :return: True on success, False on failure.
         """
 
-        system = self.__get_system()
+        system = self._get_system()
         if system is not None:
             # Supported system detected
             # Download the patch manifest and load it as a json object
             try:
                 patch_manifest = helper.retry(
                     self.retry_count, self.retry_timeout,
-                    self.__get_patch_manifest,
+                    self._get_patch_manifest,
                     patch_manifest=patch_manifest)
             except requests.exceptions.RequestException:
                 print(
@@ -124,7 +145,7 @@ class Patcher:
 
             # Now that we have the patch manifest we can start comparing
             # the file list to the files in the local install path
-            return self.__check_files(ttr_dir, system, patch_manifest)
+            return self._check_files(ttr_dir, system, patch_manifest)
 
         # Not supported so display a message to the user
         print(
@@ -133,7 +154,7 @@ class Patcher:
 
         return False
 
-    def __get_system(self):
+    def _get_system(self):
         """Checks if TTR is supported on the system.
 
         :return: The system name or None if system is not supported.
@@ -151,7 +172,7 @@ class Patcher:
 
         return system
 
-    def __get_patch_manifest(self, patch_manifest):
+    def _get_patch_manifest(self, patch_manifest):
         """Downloads the Toontown Rewritten patch manifest and stores as
         json object.
 
@@ -163,14 +184,14 @@ class Patcher:
             patch_manifest += '.txt'
 
         remote_file = f'https://cdn.toontownrewritten.com{patch_manifest}'
-        request = self.session.get(
+        request = self._session.get(
             url=remote_file, timeout=self.request_timeout)
         request.raise_for_status()
         patch_manifest = request.json()
 
         return patch_manifest
 
-    def __check_files(self, ttr_dir, system, patch_manifest):
+    def _check_files(self, ttr_dir, system, patch_manifest):
         """Check the local game files against the files in the patch manifest.
         For any files that don't exist locally, download the full file fresh.
         For files that do exist locally, check if it needs to be updated.
@@ -190,7 +211,7 @@ class Patcher:
             abs_file = os.path.join(ttr_dir, filename)
 
             # Get the download info for the file
-            if not self.__check_patch(
+            if not self._check_patch(
                     system, abs_file, patch_manifest, download_info):
                 return False
 
@@ -199,12 +220,12 @@ class Patcher:
 
         if download_info:
             # New downloads were found
-            return self.__download_worker(ttr_dir, download_info)
+            return self._download_worker(ttr_dir, download_info)
 
         # No new downloads were found
         return True
 
-    def __check_patch(self, system, file, patch_manifest, download_info):
+    def _check_patch(self, system, file, patch_manifest, download_info):
         """Checks if there is a patch for the specified file. If the file
         cannot be found on disk, assume it to be a new download request.
 
@@ -250,7 +271,7 @@ class Patcher:
             if (filename in patch_manifest
                     and system in patch_manifest[filename]['only']):
                 with open(file, 'rb') as file_obj:
-                    sha1sum = self.__get_sha1sum(file_obj)
+                    sha1sum = self._get_sha1sum(file_obj)
                 # File found in patch_manifest, check if hash matches
                 if self.debug:
                     print(f'DEBUG: {filename} local hash: {sha1sum}')
@@ -326,7 +347,7 @@ class Patcher:
         download_info.update(download_info_new)
         return True
 
-    def __get_sha1sum(self, file_obj):
+    def _get_sha1sum(self, file_obj):
         """Hashes and returns sha1sum of the contents of a file object.
 
         :param file_obj: The file object.
@@ -345,7 +366,7 @@ class Patcher:
 
         return sha1.hexdigest()
 
-    def __download_worker(self, ttr_dir, download_info):
+    def _download_worker(self, ttr_dir, download_info):
         """Prepares the download by requesting a download mirror endpoint and
         sets up a temporary directory for staging. Downloads are then
         decompressed and processed.
@@ -355,7 +376,7 @@ class Patcher:
         :return: True on success, False on failure.
         """
 
-        if self.mirrors is None:
+        if self._mirrors is None:
             # Cancel the download since no mirrors could be found
             return False
 
@@ -368,12 +389,12 @@ class Patcher:
                 # Use a tqdm thread_map to download files concurrently
                 # Static parameters get repeated for each item in download_info
                 results = thread_map(
-                    self.__attempt_download_file,
+                    self._attempt_download_file,
                     [ttr_dir] * len(download_info),
                     [temp] * len(download_info),
                     list(download_info.values()),
                     list(download_info.keys()),
-                    max_workers=self.cpus,
+                    max_workers=self._cpus,
                     desc=desc,
                     bar_format=bar
                 )
@@ -389,9 +410,9 @@ class Patcher:
 
         return True
 
-    def __attempt_download_file(
+    def _attempt_download_file(
             self, ttr_dir, temp_dir, file_info, remote_filename):
-        """Wrapper for __download_file. Used for attempting and retrying a
+        """Wrapper for _download_file. Used for attempting and retrying a
         failed download.
 
         :param ttr_dir: The currently set installation path in launcher.json.
@@ -402,11 +423,11 @@ class Patcher:
         """
 
         return helper.retry(
-            self.retry_count, self.retry_timeout, self.__download_file,
+            self.retry_count, self.retry_timeout, self._download_file,
             False, ttr_dir=ttr_dir, temp_dir=temp_dir, file_info=file_info,
             remote_filename=remote_filename)
 
-    def __download_file(
+    def _download_file(
             self, ttr_dir, temp_dir, file_info, remote_filename):
         """Downloads a file from a mirror.
 
@@ -417,7 +438,7 @@ class Patcher:
         :return: True on success, False on failure.
         """
 
-        mirror = self.mirrors[0]
+        mirror = self._mirrors[0]
         local_filename = file_info['local_filename']
         comp_hash = file_info['comp_hash']
         decomp_file_path = os.path.join(temp_dir, local_filename)
@@ -440,19 +461,19 @@ class Patcher:
 
             # Verify downloaded file hash
             with open(temp_file_path, 'rb') as comp_file:
-                local_comp_hash = self.__get_sha1sum(comp_file)
+                local_comp_hash = self._get_sha1sum(comp_file)
                 if local_comp_hash != comp_hash:
                     # Hash mismatch, fail the download
                     return False
 
             # Decompress file
-            res = self.__decompress_bz2(
+            res = self._decompress_bz2(
                 temp_file_path, decomp_file_path, decomp_hash)
             if not res:
                 return False
 
             # Process decompressed file
-            res = self.__process_decompressed_file(
+            res = self._process_decompressed_file(
                 ttr_dir, temp_dir, file_info)
             if not res:
                 return False
@@ -460,14 +481,14 @@ class Patcher:
             # Log completed downloads
             tqdm.write(f'Downloaded {local_filename}')
         except (FileNotFoundError, requests.exceptions.RequestException):
-            if len(self.mirrors) > 1:
-                self.mirrors.remove(mirror)
+            if len(self._mirrors) > 1:
+                self._mirrors.remove(mirror)
 
             return False
 
         return True
 
-    def __decompress_bz2(self, comp_file_path, decomp_file_path, decomp_hash):
+    def _decompress_bz2(self, comp_file_path, decomp_file_path, decomp_hash):
         """Decompress the downloaded bz2 file more efficiently.
 
         :param comp_file_path: The path to the compressed file.
@@ -490,7 +511,7 @@ class Patcher:
 
         # Verify decompressed file hash
         with open(decomp_file_path, 'rb') as decomp_file:
-            local_decomp_hash = self.__get_sha1sum(decomp_file)
+            local_decomp_hash = self._get_sha1sum(decomp_file)
             if local_decomp_hash != decomp_hash:
                 # Hash mismatch, something went wrong with decompression
                 print(f'\nFailed to decompress {filename}.')
@@ -498,7 +519,7 @@ class Patcher:
 
         return True
 
-    def __process_decompressed_file(self, ttr_dir, temp_dir, file_info):
+    def _process_decompressed_file(self, ttr_dir, temp_dir, file_info):
         """Processes the decompressed download. Full downloads are moved into
         the TTR directory while patches are applied to existing files using
         bsdiff4.
@@ -524,28 +545,10 @@ class Patcher:
             # Verify patch was applied successfully by comparing hashes
             with open(final_file_path, 'rb') as final_file:
                 post_patch_hash = file_info['post_patch_hash']
-                local_post_patch_hash = self.__get_sha1sum(final_file)
+                local_post_patch_hash = self._get_sha1sum(final_file)
                 if local_post_patch_hash != post_patch_hash:
                     # Hash mismatch, something went wrong with the patch
                     print(f'\nFailed to apply patch to {local_filename}')
                     return False
-
-        return True
-
-    def check_update(self, ttr_dir, patch_manifest):
-        """Checks for updates for Toontown Rewritten and installs them.
-
-        :param ttr_dir: The currently set installation path in launcher.json.
-        :param patch_manifest: The patch manifest URL path.
-        :return: True on success, False if user declines or on failure.
-        """
-
-        # Check if TTR installation directory exists
-        if not self.__check_install_path(ttr_dir):
-            return False
-
-        # Downloads and installs any new game files
-        if not self.__patch_worker(ttr_dir, patch_manifest):
-            return False
 
         return True

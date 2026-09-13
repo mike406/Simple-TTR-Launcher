@@ -76,7 +76,7 @@ def load_launcher_json():
 def update_launcher_json(settings_data):
     """Updates the launcher.json settings file with the settings_data object.
 
-    :param settings_data: The settings from launcher.json using json.load().
+    :param settings_data: The settings from launcher.json.
     """
 
     # Open file and write json
@@ -94,7 +94,7 @@ def fix_settings_data(settings_data):
     Fixes applied:
     - Run os.path.expanduser() on ttr-dir if path starts with a ~
 
-    :param settings_data: The settings from launcher.json using json.load().
+    :param settings_data: The settings from launcher.json.
     """
 
     updated = False
