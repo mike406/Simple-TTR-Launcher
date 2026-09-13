@@ -373,7 +373,6 @@ class Patcher:
                     [temp] * len(download_info),
                     list(download_info.values()),
                     list(download_info.keys()),
-                    [self.mirrors] * len(download_info),
                     max_workers=self.cpus,
                     desc=desc,
                     bar_format=bar
@@ -391,7 +390,7 @@ class Patcher:
         return True
 
     def __attempt_download_file(
-            self, ttr_dir, temp_dir, file_info, remote_filename, mirrors):
+            self, ttr_dir, temp_dir, file_info, remote_filename):
         """Wrapper for __download_file. Used for attempting and retrying a
         failed download.
 
@@ -399,28 +398,26 @@ class Patcher:
         :param temp_dir: The temporary directory to download files to.
         :param file_info: The file info dictionary.
         :param remote_filename: The file to download.
-        :param mirrors: The list of download mirrors.
         :return: True on success, False on failure.
         """
 
         return helper.retry(
             self.retry_count, self.retry_timeout, self.__download_file,
             False, ttr_dir=ttr_dir, temp_dir=temp_dir, file_info=file_info,
-            remote_filename=remote_filename, mirrors=mirrors)
+            remote_filename=remote_filename)
 
     def __download_file(
-            self, ttr_dir, temp_dir, file_info, remote_filename, mirrors):
+            self, ttr_dir, temp_dir, file_info, remote_filename):
         """Downloads a file from a mirror.
 
         :param ttr_dir: The currently set installation path in launcher.json.
         :param temp_dir: The temporary directory to download files to.
         :param file_info: The file info dictionary.
         :param remote_filename: The file to download.
-        :param mirrors: The list of download mirrors.
         :return: True on success, False on failure.
         """
 
-        mirror = mirrors[0]
+        mirror = self.mirrors[0]
         local_filename = file_info['local_filename']
         comp_hash = file_info['comp_hash']
         decomp_file_path = os.path.join(temp_dir, local_filename)
@@ -463,8 +460,8 @@ class Patcher:
             # Log completed downloads
             tqdm.write(f'Downloaded {local_filename}')
         except (FileNotFoundError, requests.exceptions.RequestException):
-            if len(mirrors) > 1:
-                mirrors.remove(mirror)
+            if len(self.mirrors) > 1:
+                self.mirrors.remove(mirror)
 
             return False
 
