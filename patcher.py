@@ -1,7 +1,6 @@
 """Handles downloading, patching and installation of the game files."""
 
 import bz2
-import concurrent.futures
 import hashlib
 import json
 import os
@@ -14,6 +13,7 @@ from urllib.parse import urljoin
 import bsdiff4
 import requests
 from tqdm.auto import tqdm
+from tqdm.contrib.concurrent import thread_map
 import helper
 
 
@@ -362,32 +362,28 @@ class Patcher:
         try:
             # Create a temporary directory to stage the downloads
             with tempfile.TemporaryDirectory(dir=ttr_dir) as temp:
-                # Locate where the temporary directory is
-                temp_dir = os.path.join(tempfile.gettempdir(), temp)
+                bar = "{desc}: {percentage:.0f}%|{bar}| {n_fmt}/{total_fmt}"
+                desc = "Downloading files"
 
-                # Build list of params for downloads
-                download_file_params = []
-                for filename in download_info:
-                    # Files to download
-                    download_file_params.append(
-                        (ttr_dir, temp_dir, download_info[filename],
-                            filename, self.mirrors))
+                # Use a tqdm thread_map to download files concurrently
+                # Static parameters get repeated for each item in download_info
+                results = thread_map(
+                    self.__attempt_download_file,
+                    [ttr_dir] * len(download_info),
+                    [temp] * len(download_info),
+                    list(download_info.values()),
+                    list(download_info.keys()),
+                    [self.mirrors] * len(download_info),
+                    max_workers=self.cpus,
+                    desc=desc,
+                    bar_format=bar
+                )
 
-                # Download files
-                with concurrent.futures.ThreadPoolExecutor(
-                        max_workers=self.cpus) as executor:
-                    futures = [executor.submit(
-                        self.__attempt_download_file,
-                        i[0], i[1], i[2], i[3], i[4]
-                        ) for i in download_file_params]
-
-                # Check for any failed downloads
-                for future in concurrent.futures.as_completed(futures):
-                    if not future.result():
-                        print(
-                            '\nOne or more downloads failed. '
-                            'Please try again in a few minutes.')
-                        return False
+                if not all(results):
+                    print(
+                        '\nOne or more downloads failed. '
+                        'Please try again in a few minutes.')
+                    return False
         except FileNotFoundError:
             print('\nFailed to create temporary directory.')
             return False
@@ -440,18 +436,10 @@ class Patcher:
 
             # Open temporary file for writing
             temp_file_path = os.path.join(temp_dir, remote_filename)
-            with open(temp_file_path, 'w+b') as comp_file:
-                # Display progress of writing the file with tqdm
-                with tqdm.wrapattr(
-                        comp_file, 'write',
-                        total=int(response.headers.get('Content-Length')),
-                        unit='B', unit_scale=True,
-                        desc=f'Downloading {local_filename}', leave=False,
-                        ascii=' █') as fobj:
-                    # Write to the file in chunks
-                    for chunk in response.iter_content(
-                            chunk_size=chunk_size):
-                        fobj.write(chunk)
+            with open(temp_file_path, 'wb') as comp_file:
+                # Write to the file in chunks
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    comp_file.write(chunk)
 
             # Verify downloaded file hash
             with open(temp_file_path, 'rb') as comp_file:
@@ -471,6 +459,9 @@ class Patcher:
                 ttr_dir, temp_dir, file_info)
             if not res:
                 return False
+
+            # Log completed downloads
+            tqdm.write(f"Downloaded {local_filename}")
         except (FileNotFoundError, requests.exceptions.RequestException):
             if len(mirrors) > 1:
                 mirrors.remove(mirror)
@@ -490,21 +481,15 @@ class Patcher:
         """
 
         chunk_size = 65536
-        comp_file_size = os.path.getsize(comp_file_path)
         filename = os.path.basename(comp_file_path)
 
         with bz2.BZ2File(comp_file_path, 'rb') as comp_file:
             with open(decomp_file_path, 'wb') as decomp_file:
-                with tqdm(
-                        total=comp_file_size, unit='B', unit_scale=True,
-                        desc=f'Decompressing {filename}',
-                        leave=False, ascii=' █') as pbar:
-                    while True:
-                        data = comp_file.read(chunk_size)
-                        if not data:
-                            break
-                        decomp_file.write(data)
-                        pbar.update(len(data))
+                while True:
+                    data = comp_file.read(chunk_size)
+                    if not data:
+                        break
+                    decomp_file.write(data)
 
         # Verify decompressed file hash
         with open(decomp_file_path, 'rb') as decomp_file:
